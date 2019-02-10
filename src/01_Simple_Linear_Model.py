@@ -28,7 +28,7 @@ print(data.y_test[0:5, :])
 print(data.y_test_cls[0:5])
 
 # Helper-function for plotting images
-def plot_images(images, cls_true, cls_pred=None, pred_logits=None):
+def plot_images(images, cls_true, cls_pred=None, true_logits=None, pred_logits=None):
     assert len(images) == len(cls_true) == 9
 
     # Create figure with 3x3 sub-plots.
@@ -43,7 +43,8 @@ def plot_images(images, cls_true, cls_pred=None, pred_logits=None):
         if cls_pred is None:
             xlabel = "True: {0}".format(cls_true[i])
         else:
-            xlabel = "True: {0} Pred: {1} ({2}%)".format(cls_true[i], cls_pred[i], int(pred_logits[i]*100.))
+            xlabel = "True: {}({}%) Pred: {}({}%)".format(cls_true[i], int(true_logits[i]*100.),
+                                                          cls_pred[i], int(pred_logits[i]*100.))
 
         ax.set_xlabel(xlabel)
 
@@ -165,8 +166,8 @@ def plot_example_errors():
     # Use TensorFlow to get a list of bollean values
     # wether each test-image has been correctly classified,
     # and a list for the predicted class of each image.
-    correct, cls_pred, logits_pred = session.run([correct_prediction, y_pred_cls, y_pred_logits],
-                                                 feed_dict=feed_dict_test)
+    correct, cls_pred, logits_pred, logits_test = session.run(
+        [correct_prediction, y_pred_cls, y_pred_logits, y_pred], feed_dict=feed_dict_test)
 
     # Negative the bollean array.
     incorrect = (correct == False)
@@ -178,16 +179,21 @@ def plot_example_errors():
     # Get the predicted classes for those images.
     cls_pred = cls_pred[incorrect]
 
-    # Get the predicted logtis for those images.
+    # Get the predicted logits for those images.
     logits_pred = logits_pred[incorrect]
 
     # Get the true classes for those images.
     cls_true = data.y_test_cls[incorrect]
 
+    # Get the predicted logits of the true for those images.
+    logits_test = logits_test[incorrect]
+    logits_true = logits_test[range(logits_test.shape[0]), cls_true]
+
     # Plot the first 9 images.
     plot_images(images=images[0:9],
                 cls_true=cls_true[0:9],
                 cls_pred=cls_pred[0:9],
+                true_logits=logits_true[0:9],
                 pred_logits=logits_pred[0:9])
 
 # Helper-function to plot the model weights
