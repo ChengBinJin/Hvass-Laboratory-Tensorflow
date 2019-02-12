@@ -16,7 +16,7 @@ print("- Test-set:\t\t{}".format(data.num_test))
 img_size_flat = data.img_size_flat
 print('- img_size_flat:\t{}'.format(img_size_flat))
 
-# tuple with heigh and width of images used to reshape arrays.
+# tuple with height and width of images used to reshape arrays.
 img_shape = data.img_shape
 print('- img_shape:\t\t{}'.format(img_shape))
 
@@ -26,6 +26,7 @@ print('- num_classes:\t\t{}'.format(num_classes))
 
 print(data.y_test[0:5, :])
 print(data.y_test_cls[0:5])
+
 
 # Helper-function for plotting images
 def plot_images(images, cls_true, cls_pred=None, true_logits=None, pred_logits=None):
@@ -54,6 +55,7 @@ def plot_images(images, cls_true, cls_pred=None, true_logits=None, pred_logits=N
 
     # Ensure the plot is shown correctly with multiple plots in a single Notebook cell.
     plt.show()
+
 
 # Plot a few images to see if data is correct
 # Get the first images from the test-set
@@ -101,15 +103,16 @@ session.run(tf.global_variables_initializer())
 # Helper-function to perform optimization iterations
 batch_size = 100
 
+
 def optimize(num_iterations):
     for i in range(num_iterations):
-        # Get a batch of trainign examples.
-        # x_batch now holds a batch of iamges and
+        # Get a batch of training examples.
+        # x_batch now holds a batch of images and
         # y_true_batch are the true labels for those images.
         x_batch, y_true_batch, _ = data.random_batch(batch_size=batch_size)
 
         # Put the batch into a dict with the proper names
-        # for placholder variables in the TensorFlow graph.
+        # for placeholder variables in the TensorFlow graph.
         # Note that the placeholder for y_true_cls is not set
         # because it is not used during training.
         feed_dict_train = {x: x_batch,
@@ -120,10 +123,12 @@ def optimize(num_iterations):
         # to the placeholder variables and then runs the optimizer.
         session.run(optimizer, feed_dict=feed_dict_train)
 
+
 # Helper-functions to show performance
 feed_dict_test = {x: data.x_test,
                   y_true: data.y_test,
                   y_true_cls: data.y_test_cls}
+
 
 def print_accuracy():
     # Use TensorFlow to compute the accuracy.
@@ -131,6 +136,7 @@ def print_accuracy():
 
     # Print the accuracy.
     print("Accuracy on test-set: {0:.1%}".format(acc))
+
 
 def print_confusion_matrix():
     # Get the true classifications for the test-set.
@@ -161,6 +167,7 @@ def print_confusion_matrix():
     # Ensure the plot is shown correctly with multiple plots
     # in a single Notebook cell.
     plt.show()
+
 
 def plot_example_errors():
     # Use TensorFlow to get a list of bollean values
@@ -196,6 +203,7 @@ def plot_example_errors():
                 true_logits=logits_true[0:9],
                 pred_logits=logits_pred[0:9])
 
+
 # Helper-function to plot the model weights
 def plot_weights():
     # Get the values for the weights from the TensorFlow variable.
@@ -209,7 +217,7 @@ def plot_weights():
 
     # Create figure with 3x4 sub-plots,
     # where the last 2 sub-plots are unused.
-    fig, axes = plt.subplots(3,4)
+    fig, axes = plt.subplots(3, 4)
     fig.subplots_adjust(hspace=0.3, wspace=0.3)
 
     for i, ax in enumerate(axes.flat):
@@ -248,6 +256,7 @@ def plot_weights():
 # print_accuracy()
 # plot_example_errors()
 # plot_weights()
+
 
 # Performance after 1000 optimization iteration
 optimize(num_iterations=1000)
