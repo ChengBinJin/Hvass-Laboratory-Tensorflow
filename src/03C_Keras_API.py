@@ -247,10 +247,12 @@ plot_example_errors(cls_pred)
 # Save & Load Model
 path_model = '../checkpoints/model.keras'
 model2.save(path_model)
+print("Success to write!")
 del model2
 
 print("Model-3 Test!")
 model3 = load_model(path_model)
+print("Success to read!")
 images = data.x_test[0:9]
 cls_true = data.y_test_cls[0:9]
 y_pred = model3.predict(x=images)
