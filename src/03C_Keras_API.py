@@ -9,6 +9,8 @@ from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import InputLayer, Input
 from tensorflow.python.keras.layers import Reshape, MaxPooling2D
 from tensorflow.python.keras.layers import Conv2D, Dense, Flatten
+from tensorflow.python.keras.models import Model
+from tensorflow.python.keras.models import load_model
 # from tensorflow.python.keras.layers import Adam
 
 from mnist import MNIST
@@ -42,7 +44,7 @@ num_classes = data.num_classes
 num_channels = data.num_channels
 
 # Helper-function for plotting images
-def plot_images(images_, cls_true_, cls_pred=None):
+def plot_images(images_, cls_true_, cls_pred_=None):
     assert len(images_) == len(cls_true_) == 9
 
     # Create figure with 3x3 sub-plots.
@@ -54,10 +56,10 @@ def plot_images(images_, cls_true_, cls_pred=None):
         ax.imshow(images_[i].reshape(img_shape), cmap='binary')
 
         # Show true and predicted classes.
-        if cls_pred is None:
+        if cls_pred_ is None:
             xlabel = "True: {0}".format(cls_true_[i])
         else:
-            xlabel = "True: {0}, Pred: {1}".format(cls_true_[i], cls_pred[i])
+            xlabel = "True: {0}, Pred: {1}".format(cls_true_[i], cls_pred_[i])
 
         # Show the classes as the label on the x-axis.
         ax.set_xlabel(xlabel)
@@ -81,19 +83,19 @@ cls_true = data.y_test_cls[0:9]
 plot_images(images_=images, cls_true_=cls_true)
 
 # Helper-function to plot example errors
-def plot_example_errors(cls_pred):
+def plot_example_errors(cls_pred_):
     # cls_pred is an array of the predicted class-number for
     # all images in the test-set.
 
     # Boolean array whether the predicted class is incorrect.
-    incorrect = (cls_pred != data.y_test_cls)
+    incorrect = (cls_pred_ != data.y_test_cls)
 
     # Get the iamges from the test-set that have been
     # incorrrectly classified.
     images_ = data.x_test[incorrect]
 
     # Get the predicted classes for those images.
-    cls_pred = cls_pred[incorrect]
+    cls_pred_ = cls_pred_[incorrect]
 
     # Get the true classes for those images.
     cls_true_ = data.y_test_cls[incorrect]
@@ -101,7 +103,7 @@ def plot_example_errors(cls_pred):
     # Plot the first 9 images.
     plot_images(images_=images_[0:9],
                 cls_true_=cls_true_[0:9],
-                cls_pred=cls_pred[0:9])
+                cls_pred_=cls_pred_[0:9])
 
 # if False:
 #     x_pretty = pt.wrap(x_image)
@@ -116,6 +118,7 @@ def plot_example_errors(cls_pred):
 #             fully_connected(size=128, name='layer_fc1').\
 #             softmax_classifier(num_classes=num_classes, labels=y_true)
 
+print('Model-1 Test!')
 # Sequential Model
 # Start construction of the Keras Sequential model.
 model = Sequential()
@@ -167,5 +170,92 @@ for name, value in zip(model.metrics_names, result):
 
 print("{0}: {1:.2%}".format(model.metrics_names[1], result[1]))
 
+# Prediciton
+images = data.x_test[0:9]
+cls_true = data.y_test_cls[0:9]
+y_pred = model.predict(x=images)
+cls_pred = np.argmax(y_pred, axis=1)
+plot_images(images_=images,
+            cls_true_=cls_true,
+            cls_pred_=cls_pred)
+
 # Examples of Mis-Classified Images
+y_pred = model.predict(x=data.x_test)
+cls_pred = np.argmax(y_pred, axis=1)
+plot_example_errors(cls_pred)
+
+print('Model-2 Test!')
+# Functional Model
+# Create an input layer which is similar to a feed_dict in TensorFlow.
+# Note that the input-shape must be a tulpe containing the image-size.
+inputs = Input(shape=(img_size_flat,))
+
+# Variable used for building theNeural Network.
+net = inputs
+
+# The input is an image as a flattened array with 784 elements.
+# But the convolutional layers expect image with shape (28, 28, 1)
+net = Reshape(img_shape_full)(net)
+
+# First convolutional layer with ReLU-activation and max-pooling.
+net = Conv2D(kernel_size=5, strides=1, filters=16, padding='same', activation='relu', name='layer_conv1')(net)
+net = MaxPooling2D(pool_size=2, strides=2)(net)
+
+# Second convolutional layer with ReLU-activation and max-pooling.
+net = Conv2D(kernel_size=5, strides=1, filters=36, padding='same', activation='relu', name='layer_conv2')(net)
+net = MaxPooling2D(pool_size=2, strides=2)(net)
+
+# Flatten the output of the conv-layer from 4-dim to 2-dim.
+net = Flatten()(net)
+
+# Last fully-connect / dense layer with ReLU-activation.
+net = Dense(128, activation='relu')(net)
+
+# Last fully-connect / dense layer with softmax-activation
+# so it can be used for classification.
+net = Dense(num_classes, activation='softmax')(net)
+
+# Output of the Neural Network.
+outputs = net
+
+# Model Compilation
+model2 = Model(inputs=inputs, outputs=outputs)
+
+model2.compile(optimizer='rmsprop',
+               loss='categorical_crossentropy',
+               metrics=['accuracy'])
+
+# Training
+model2.fit(x=data.x_train,
+           y=data.y_train,
+           epochs=1, batch_size=128)
+
+# Evaluation
+result = model2.evaluate(x=data.x_test,
+                         y=data.y_test)
+
+for name, value in zip(model2.metrics_names, result):
+    print(name, value)
+
+print("{0}: {1:.2%}".format(model2.metrics_names[1], result[1]))
+
+# Examples of Mis-Classified Images
+y_pred = model2.predict(x=data.x_test)
+cls_pred = np.argmax(y_pred, axis=1)
+plot_example_errors(cls_pred)
+
+# Save & Load Model
+path_model = '../checkpoints/model.keras'
+model2.save(path_model)
+del model2
+
+print("Model-3 Test!")
+model3 = load_model(path_model)
+images = data.x_test[0:9]
+cls_true = data.y_test_cls[0:9]
+y_pred = model3.predict(x=images)
+cls_pred = np.argmax(y_pred, axis=1)
+plot_images(images_=images,
+            cls_pred_=cls_pred,
+            cls_true_=cls_true)
 
