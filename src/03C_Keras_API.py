@@ -12,6 +12,7 @@ from tensorflow.python.keras.layers import Conv2D, Dense, Flatten
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.models import load_model
 # from tensorflow.python.keras.layers import Adam
+from tensorflow.python.keras import backend as K
 
 from mnist import MNIST
 
@@ -261,3 +262,113 @@ plot_images(images_=images,
             cls_pred_=cls_pred,
             cls_true_=cls_true)
 
+# Visualization of Layer Weights and Outputs
+# Helper-function for plotting convolutional weights
+def plot_conv_weights(weights, input_channel=0):
+    # Get the lowest and highest values for the weights.
+    # This is used to correct the colour intensity across
+    # the images so they can be compared with each oterh.
+    w_min = np.min(weights)
+    w_max = np.max(weights)
+
+    # Number of filters used in the conv. layer.
+    num_filters = weights.shape[3]
+
+    # Number of grids to plot.
+    # Rounded-up, square-root of the number of filters.
+    num_grids = math.ceil(math.sqrt(num_filters))
+
+    # Create figure with a grid of sub-plots.
+    fig, axes = plt.subplots(num_grids, num_grids)
+
+    # Plot all filter-weights.
+    for i, ax in enumerate(axes.flat):
+        # Only plot the valid filter-weights.
+        if i < num_filters:
+            # Get the weights for i'th filter of the input channel.
+            # See new_conv_layer() for details on the format
+            # of this 4-dim tensor.
+            img = weights[:, :, input_channel, i]
+
+            # Plot image.
+            ax.imshow(img, vmin=w_min, vmax=w_max, interpolation='nearest', cmap='seismic')
+
+        # Remove ticks from the plot.
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Ensure the plot is shown correctly with multiple plots
+    # in a single Notebook cell.
+    plt.show()
+
+# Get layers
+model3.summary()
+layer_input = model3.layers[0]
+layer_conv1 = model3.layers[2]
+layer_conv2 = model3.layers[4]
+
+# Convolutional Weights
+weights_conv1 = layer_conv1.get_weights()[0]
+print('weights_conv1 shape: {}'.format(weights_conv1.shape))
+plot_conv_weights(weights=weights_conv1, input_channel=0)
+
+weights_conv2 = layer_conv2.get_weights()[0]
+plot_conv_weights(weights=weights_conv2, input_channel=0)
+
+# Helper-function for plotting the output of a convolutional layer
+def plot_conv_output(values):
+    # Number of filters used in the conv. layer.
+    num_filters = values.shape[3]
+
+    # Number of grids to plot.
+    # Rounded-up, square-root of the number of filters.
+    num_grids = math.ceil(math.sqrt(num_filters))
+
+    # Creat efigure with a grid of sub-plots.
+    fig, axes = plt.subplots(num_grids, num_grids)
+
+    # Plot the output iamges of all the filters.
+    for i, ax in enumerate(axes.flat):
+        # Only plot the iamges for valid filters.
+        if i < num_filters:
+            # Get the output image of using the i'th filter.
+            img = values[0, :, :, i]
+
+            # Plot image.
+            ax.imshow(img, interpolation='nearest', cmap='binary')
+
+        # Remove ticks from the plot.
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Ensure the plot is shown correctly with multiple plots
+    # in a single Notebook cell.
+    plt.show()
+
+# Input Image
+def plot_image(image):
+    plt.imshow(image.reshape(img_shape),
+               interpolation='nearest',
+               cmap='binary')
+    plt.show()
+
+image1 = data.x_test[0]
+plot_image(image1)
+
+# Output of Convolutional Layer - Method 1
+output_conv1 = K.function(inputs=[layer_input.input],
+                          outputs=[layer_conv1.output])
+
+layer_output1 = output_conv1([[image1]])[0]
+print('layer_output1.shape: {}'.format(layer_output1.shape))
+
+plot_conv_output(values=layer_output1)
+
+# Output of Convolutional Layer - Method 2
+output_conv2 = Model(inputs=layer_input.input,
+                     outputs=layer_conv2.output)
+
+layer_output2 = output_conv2.predict(np.array([image1]))
+print('layer_output2.shape: {}'.format(layer_output2.shape))
+
+plot_conv_output(values=layer_output2)
