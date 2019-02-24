@@ -3,3 +3,4 @@ src/idea/vcs.xml
 src/__pycache__
 data/
 checkpoints/
+.DS_Store
