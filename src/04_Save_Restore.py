@@ -57,7 +57,7 @@ def plot_images(images_, cls_true_, cls_pred=None):
 
     for i, ax in enumerate(axes.flat):
         # Plot iamge.
-        ax.imshow(images_[i].reshape(img_shape), cmap='binar')
+        ax.imshow(images_[i].reshape(img_shape), cmap='binary')
 
         # Show true and predicted classes.
         if cls_pred is None:
@@ -81,7 +81,7 @@ def plot_images(images_, cls_true_, cls_pred=None):
 images = data.x_test[0:9]
 
 # Get the true classes for those images.
-cls_true = data.y_test[0:9]
+cls_true = data.y_test_cls[0:9]
 
 # Plot the images and labels using our helper-function above.
 plot_images(images_=images, cls_true_=cls_true)
@@ -182,7 +182,7 @@ def flatten_layer(layer):
     # [num_images, img_height * img_width * num_channels]
 
     # Return bot hthe flattened layer and the number of features.
-    return layer_flat_, num_features
+    return layer_flat_, num_features_
 
 # Helper-function for creating a new Fully-Connected Layer
 def new_fc_layer(input_,                # The previous layer.
@@ -268,7 +268,7 @@ save_path = os.path.join(save_dir, 'best_validation')
 session = tf.Session()
 
 def init_variables():
-    session.run(tf.global_variables.initializer())
+    session.run(tf.global_variables_initializer())
 
 init_variables()
 
@@ -326,7 +326,7 @@ def optimize(num_iterations):
         # Get a batch of training exaples.
         # x_batch now holds a batch of images and
         # y_true-batch are the true labels for those images.
-        x_batch, y_true_batch = data.x_train.next_batch(train_batch_size)
+        x_batch, y_true_batch, _ = data.random_batch(train_batch_size)
 
         # Put the batch into a dict with the proper names
         # for placeholder variables in the TensorFlow graph.
@@ -341,7 +341,7 @@ def optimize(num_iterations):
         # Print status every 100 iterations and after last iteration.
         if (total_iterations % 100 == 0) or (i == (num_iterations - 1)):
             # Calculate the accuracy on the training-batch.
-            acc_train = session.ruN(accuracy, feed_dict=feed_dict_train)
+            acc_train = session.run(accuracy, feed_dict=feed_dict_train)
 
             # Calculate the accuracy on the validation-set.
             # The function returns 2 values but we only need the first.
@@ -386,10 +386,9 @@ def optimize(num_iterations):
 
     # Print the time-usage.
     print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))
-    print("Time usage: {} sec.".format(time_dif))
 
 # Helper-function to plot example errors
-def plot_exapmle_errors(cls_pred, correct):
+def plot_example_errors(cls_pred, correct):
     # This function is called from print_test_accuracy() below.
 
     # cls_pred is an array of the predicted class-number for
@@ -409,7 +408,7 @@ def plot_exapmle_errors(cls_pred, correct):
     cls_pred = cls_pred[incorrect]
 
     # Get the true clases for those iamges.
-    cls_true_ = data.y_test[incorrect]
+    cls_true_ = data.y_test_cls[incorrect]
 
     # Plot the first 9 images.
     plot_images(images_=images_[0:9],
@@ -424,7 +423,7 @@ def plot_confusion_matrix(cls_pred):
     # all iamges in the test-set.
 
     # Get the true classifications for the test-set.
-    cls_true_ = data.y_test
+    cls_true_ = data.y_test_cls
 
     # Get the confusion matrix using sklearn.
     cm = confusion_matrix(y_true=cls_true_,
@@ -499,17 +498,105 @@ def predict_cls_validation():
                        cls_true_=data.y_val_cls)
 
 # Helper-function for showing the performance
+def print_test_accuracy(show_example_errors=False,
+                        show_confusion_matrix=False):
+    # Fora ll the images in the test-set,
+    # calculate the predicted classes and whether they are correct.
+    correct, cls_pred = predict_cls_test()
+
+    # Classification accuracy and teh number of correct classifications.
+    acc, num_correct = cls_accuracy(correct)
+
+    # Number of images being classified.
+    num_images = len(correct)
+
+    # Print the accuracy.
+    msg = "Accuracy on Test-set: {0:.1%} ({1} / {2})"
+    print(msg.format(acc, num_correct, num_images))
+
+    # Plot some examples of mis-classifications, if desired.
+    if show_example_errors:
+        print("Example errors:")
+        plot_example_errors(cls_pred=cls_pred, correct=correct)
+
+    # Plot the confusion matrix, if desired.
+    if show_confusion_matrix:
+        print("Confusion Matrix:")
+        plot_confusion_matrix(cls_pred=cls_pred)
 
 # Helper-functon for plotting convolutional weights
+def plot_conv_weights(weights, input_channel=0):
+    # Assume weights are TensorFlow ops for 4-dim variables
+    # e.g. weights_conv1 or weighs_conv2
+
+    # Retrieve the values of the weight-variables from TensorFlow.
+    # A feed-dict is not necessary because nothing is calculated.
+    w = session.run(weights)
+
+    # Print mean and standard deviation.
+    print("Mean: {0:.5f}, Stdev: {1:.5f}".format(w.mean(), w.std()))
+
+    # Get the lowest and highest values for the weights.
+    # This is used to correct the colour intensity across
+    # the images so they can be compared with each other.
+    w_min = np.min(w)
+    w_max = np.max(w)
+
+    # Number of filters used in conv. layer.
+    num_filters = w.shape[3]
+
+    # Number of grids to plot.
+    # Rounded-up, square-root of the number of filters.
+    num_grids = math.ceil(math.sqrt(num_filters))
+
+    # Create figure with a grid of sub-plots.
+    fig, axes = plt.subplots(num_grids, num_grids)
+
+    # Plot all the filter-weights.
+    for i, ax in enumerate(axes.flat):
+        # Only plot the valid filter-weights.
+        if i < num_filters:
+            # Get the weights for the i'th filter of the input channel.
+            # The format of this 4-dim tensor is determined by the
+            # TensorFlow API. See Tutorial #02 for more details.
+            img = w[:, :, input_channel, i]
+
+            # Plot image.
+            ax.imshow(img, vmin=w_min, vmax=w_max, interpolation='nearest', cmap='seismic')
+
+        # Remove ticks from the plot.
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Ensure the plot is shown correctly with multiple plots
+    # in a single Notebook cell.
+    plt.show()
 
 # Performance before any optimization
-print("Performance before any optimization!")
+print("\nPerformance before any optimization!")
+print_test_accuracy()
+plot_conv_weights(weights=weight_conv1)
 
 # Perform 10,000 optimization iterations
-print("Perform 10,000 optimization iterations")
+print("\nPerform 10,000 optimization iterations")
+optimize(num_iterations=10000)
+print_test_accuracy(show_example_errors=True,
+                    show_confusion_matrix=True)
+plot_conv_weights(weights=weight_conv1)
 
 # Initialize Variables Again
+init_variables()
+print_test_accuracy()
+plot_conv_weights(weights=weight_conv1)
 
 # Restore Best Variables
+saver.restore(sess=session, save_path=save_path)
+print("\nRestore success!")
+print_test_accuracy(show_example_errors=True,
+                    show_confusion_matrix=True)
+plot_conv_weights(weights=weight_conv1)
 
 # Close TnesorFlow Session
+# This has been commented out in case you want to modify and experiment
+# with the Notebook without having to restart it.
+session.close()
