@@ -1,3 +1,4 @@
+import os
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -246,7 +247,12 @@ cls_pred = np.argmax(y_pred, axis=1)
 plot_example_errors(cls_pred)
 
 # Save & Load Model
-path_model = '../checkpoints/model.keras'
+path_model = '../checkpoints'
+if not os.path.exists(path_model):
+    os.makedirs(path_model)
+    print("Make folder success!")
+
+path_model = os.path.join(path_model, 'model.kears')
 model2.save(path_model)
 print("Success to write!")
 del model2
