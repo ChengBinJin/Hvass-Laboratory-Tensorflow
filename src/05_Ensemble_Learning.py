@@ -13,6 +13,18 @@ from mnist import MNIST
 
 print("Tensorflow version: {0:6}".format(tf.__version__))
 
+# Configuration of Neural Network
+# Convolutional layer 1.
+filter_size1 = 5        # Convolution filters are 5 x 5 pixels.
+num_filters1 = 16       # There are 16 of these filters.
+
+# Convolutional layer 2.
+filter_size2 = 5        # Convolution filters are 5 x 5 pixels.
+num_filters2 = 36        # There are 36 of these filters.
+
+# Fully-connected layer.
+fc_size = 128           # Number of neurons in fully-connected layer.
+
 # Load Data
 data = MNIST(data_dir="../data/MNIST")
 
@@ -52,15 +64,15 @@ def random_training_set():
     idx_validation = idx[train_size:]
 
     # Select the images and labels for the new training-set.
-    x_train = combined_images[idx_train, :]
-    y_train = combined_labels[idx_train, :]
+    x_train_ = combined_images[idx_train, :]
+    y_train_ = combined_labels[idx_train, :]
 
     # Select the images and labels for the new validation-set.
     x_validation = combined_images[idx_validation, :]
     y_validation = combined_labels[idx_validation, :]
 
     # Return the new training- and validation-sets.
-    return x_train, y_train, x_validation, y_validation
+    return x_train_, y_train_, x_validation, y_validation
 
 # Data Dimensions
 # We know that MNIST images are 28 pixels in each dimension.
@@ -97,20 +109,20 @@ def plot_images(images_,                     # Image to plot, 2-d array.
     fig.subplots_adjust(hspace=hspace, wspace=0.3)
 
     # For each of the sub-plots.
-    for i, ax in enumerate(axes.flat):
+    for idx, ax in enumerate(axes.flat):
         # There may not be enoguh images for all sub-plots.
-        if i < len(images_):
+        if idx < len(images_):
             # Plot image.
-            ax.imshow(images_[i].reshape(img_shape), cmap='binary')
+            ax.imshow(images_[idx].reshape(img_shape), cmap='binary')
 
             # Show true and predicted classes.
             if ensemble_cls_pred is None:
-                xlabel = "True: {0}".format(cls_true_[i])
+                xlabel = "True: {0}".format(cls_true_[idx])
             else:
                 msg = "True: {0}\nEnsemble: {1}\nBest Net: {2}"
-                xlabel = msg.format(cls_true_[i],
-                                    ensemble_cls_pred[i],
-                                    best_cls_pred[i])
+                xlabel = msg.format(cls_true_[idx],
+                                    ensemble_cls_pred[idx],
+                                    best_cls_pred[idx])
 
             # Show the classes as the label on the x-axis.
             ax.set_xlabel(xlabel)
@@ -192,4 +204,293 @@ def new_conv_layer(inputs,                  # The previous layer.
                                strides=[1, 2, 2, 1],
                                padding='SAME')
 
-    #
+    # Rectified Linear Unit (ReLU).
+    # It calculates max(x, 0) for each input pixel x.
+    # This adds some non-linearity to the formula and allows us
+    # to learn more complicated functions.
+    layer = tf.nn.relu(layer)
+
+    # Note that ReLU is normally executed before the pooling,
+    # but since relu(max_pool(x)) == max_pool(relu(x)) we can
+    # save 75% of the relu-operations by max-pooling first.
+
+    # We return both the resulting layer and the filter-weights
+    # because we will plot the weights later.
+    return layer, weights
+
+def flatten_layer(layer):
+    # Get the shape of the input layer.
+    layer_shape = layer.get_shape()
+
+    # The shape of the input layer is assumed to be:
+    # Layer_shape == [num_images, img_height, img_width, num_channels]
+
+    # The number of features is img_height * img_width * num_channels
+    # We can use a function from TensorFlow to calculate this.
+    num_features_ = layer_shape[1:4].num_elements()
+
+    # Reshape the layer to [num_images, num_features].
+    # Note that we just set the size of the second dimension
+    # to num_features and the size of the first dimension to -1
+    # which means the size in that dimension is calculated
+    # so the total size of the tensor is unchanged from the reshaping.
+    layer_flat_ = tf.reshape(layer, [-1, num_features_])
+
+    # The shape of the flattened layer is now:
+    # [num_images, img_height * img_width * num_channels]
+
+    # Return both the flattened layer and the number of features.
+    return layer_flat_, num_features_
+
+def new_fc_layer(inputs,                        # The previous layer.
+                 num_inputs,                    # Num. inputs from prev. layer.
+                 num_outputs,                   # Num. outputs.
+                 use_relu=True):                # Use Rectified Linear Unit (ReLU)?
+    # Create new weights and biases.
+    weights = new_weights(shape=[num_inputs, num_outputs])
+    biases = new_biases(length=num_outputs)
+
+    # Calculate the layer as the matrix multiplication of
+    # the input and weights, and the add the bias-values.
+    layer = tf.matmul(inputs, weights) + biases
+
+    # Use ReLU?
+    if use_relu:
+        layer = tf.nn.relu(layer)
+
+    return layer
+
+# Convolutional Layer 1
+layer_conv1, weights_conv1 = new_conv_layer(inputs=x_image,
+                                            num_input_channels=num_channels,
+                                            filter_size=filter_size1,
+                                            num_filters=num_filters1,
+                                            use_pooling=True)
+print("layer_conv1 shape: {}".format(layer_conv1.get_shape().as_list()))
+
+# Convolutional Layer 2
+layer_conv2, weights_conv2 = new_conv_layer(inputs=layer_conv1,
+                                            num_input_channels=num_filters1,
+                                            filter_size=filter_size2,
+                                            num_filters=num_filters2,
+                                            use_pooling=True)
+print("layer_conv2 shape: {}".format(layer_conv2.get_shape().as_list()))
+
+# Flatten Layer
+layer_flat, num_features = flatten_layer(layer_conv2)
+print("layer_flat shape: {}".format(layer_flat.get_shape().as_list()))
+
+# Fully-Connected Layer 1
+layer_fc1 = new_fc_layer(inputs=layer_flat,
+                         num_inputs=num_features,
+                         num_outputs=fc_size,
+                         use_relu=True)
+print("layer_fc1 shape: {}".format(layer_fc1.get_shape().as_list()))
+
+# Fully-Connected Layer 2
+layer_fc2 = new_fc_layer(inputs=layer_fc1,
+                         num_inputs=fc_size,
+                         num_outputs=num_classes,
+                         use_relu=False)
+print("layer_fc2 shape: {}".format(layer_fc2.get_shape().as_list()))
+
+# Predicted Class
+y_pred = tf.nn.softmax(layer_fc2)
+y_pred_cls = tf.argmax(y_pred, axis=1)
+
+# Cost-function to be optimized
+cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(logits=layer_fc2,
+                                                           labels=y_true)
+loss = tf.reduce_mean(cross_entropy)
+
+# Optimization Method
+optimizer = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(loss)
+
+# Performance measures
+correct_prediction = tf.equal(y_pred_cls, y_true_cls)
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+# Saver
+saver = tf.train.Saver(max_to_keep=100)
+save_dir = '../checkpoints/'
+
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+
+def get_save_path(net_number):
+    return save_dir + 'network' + str(net_number)
+
+# TensorFlow Run
+# Create TensorFlow session
+session = tf.Session()
+
+# Initialize variables
+def init_variables():
+    session.run(tf.global_variables_initializer())
+
+# Helper-function to create a random training batch.
+train_batch_size = 64
+
+def random_batch(x_train_, y_train_):
+    # Total number of images in the trainig-set.
+    num_images = len(x_train)
+
+    # Create a random index into the training-set,
+    idx = np.random.choice(num_images, size=train_batch_size, replace=False)
+
+    # Use the random index to select reandom images and labels.
+    x_batch = x_train_[idx, :]   # Images.
+    y_batch = y_train_[idx, :]   # Labels.
+
+    # Return the batch.
+    return x_batch, y_batch
+
+def optimize(num_iterations_, x_train_, y_train_):
+    # Start-time used for printing time-usage below.
+    start_time = time.time()
+
+    for iter_ in range(num_iterations_):
+        # Get a batch of training examples.
+        # x_batch now holds a batch of images and
+        # y_true_batch are the true labels for those iamges.
+        x_batch, y_true_batch = random_batch(x_train_, y_train_)
+
+        # Put the batch into a dict with the proper names
+        # for placeholder variables in the TensorFlow graph.
+        feed_dict_train = {x: x_batch,
+                           y_true: y_true_batch}
+
+        # Run the optimize usingthis batch of trainign data.
+        # TensorFlow assigns the variables in feed_dict_trian
+        # to the placeholder variables and then runs the optimizer.
+        session.run(optimizer, feed_dict=feed_dict_train)
+
+        # Print status every 100 iterations and after last iterations.
+        if iter_ % 100 == 0:
+            # Calculate the accuracy on the training-batch.
+            acc = session.run(accuracy, feed_dict=feed_dict_train)
+
+            # Status-message for printing.
+            msg = "Optimization Iteration: {0:>6}, Training Batch Accuracy: {1:>6.1%}"
+
+            # Print it.
+            print(msg.format(iter_+1, acc))
+
+    # Ending time.
+    end_time = time.time()
+
+    # Difference between start and end-times.
+    time_dif = end_time - start_time
+
+    # Print the time-usage.
+    print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))
+
+# Create ensemble of neural networks.
+num_networks = 5
+num_iterations = 10
+
+is_ensemble = True
+if is_ensemble:
+    # For each of the neural networks.
+    for i in range(num_networks):
+        print("Neural network: {0}".format(i))
+
+        # Create a random training-set. Ignore the validation-set.
+        x_train, y_train, _, _ = random_training_set()
+
+        # Initialize the variables of the TensorFlow graph.
+        session.run(tf.global_variables_initializer())
+
+        # Optimize the variables using this training-set.
+        optimize(num_iterations_=num_iterations,
+                 x_train_=x_train,
+                 y_train_=y_train)
+
+        # Save the optimized variables to disk.
+        saver.save(sess=session, save_path=get_save_path(i))
+
+        # Print newline.
+        print()
+
+# Helper-functions for calculating and predicting classifications
+# Split the data-set in batchs of this size to limit RAM usage.
+batch_size = 256
+
+def predict_labels(images_):
+    # Number of images.
+    num_images = len(images_)
+
+    # Allocate an array for the predicted labels which
+    # will be calculated in batches and filled into this array.
+    pred_labels = np.zeros(shape=(num_images, num_classes), dtype=np.float32)
+
+    # Now calculate the predicted labels for the batches.
+    # We will just iterate through all the batches.
+    # There might be a more clever and Pythonic way of doing this.
+
+    # The starting index ofr the next batch is denoted i.
+    idx_i = 0
+
+    while idx_i < num_images:
+        # The ending index for the next batch is denoted j.
+        idx_j = min(idx_i + batch_size, num_images)
+
+        # Create a feed-dict with the images between index i and j.
+        feed_dict = {x: images[idx_i:idx_j, :]}
+
+        # Calculate the predicted labels using TensorFlow.
+        pred_labels[idx_i:idx_j] = session.run(y_pred, feed_dict=feed_dict)
+
+        # Set the start-index for the next batch to the
+        # end-index of the current batch.
+        idx_i = idx_j
+
+    return pred_labels
+
+def correct_prediction(images_, labels_, cls_true_):
+    # Calculate the predicted labels.
+    pred_labels = predict_labels(images_=images_)
+
+    # Calculate the predicted class-number for each image.
+    cls_pred = np.argmax(pred_labels, axis=1)
+
+    # Create a boolean array whether each image is correctly classified.
+    correct = (cls_true_ == cls_pred)
+
+    return correct
+
+def test_correct():
+    return correct_prediction(images_=data.x_test,
+                              labels_=data.y_test,
+                              cls_true_=data.y_test_cls)
+
+def validation_correct():
+    return correct_prediction(images_=data.x_val,
+                              labels_=data.y_val,
+                              cls_true_=data.y_val_cls)
+
+# Helper-functions for calculating the classification accuracy
+def classification_accuracy(correct):
+    # When averaging a boolean array, False means 0 and True means 1.
+    # So we are calculating: number of True / len(correct) which is
+    # the same as the classification accuracy.
+    return correct.mean()
+
+def test_accuracy():
+    # Get the array of booleans whether the classifications are correct
+    # for the test-set.
+    correct = test_correct()
+
+    # Calculate the classification accuracy and return it
+    return classification_accuracy(correct)
+
+def validation_accuracy():
+    # Get the array of booleans whether the classificatiosn are correct
+    # for the validation-set.
+    correct = validation_correct()
+
+    # Calculate the classification accuracy and return it.
+    return classification_accuracy(correct)
+
+# Results and analysis
+
