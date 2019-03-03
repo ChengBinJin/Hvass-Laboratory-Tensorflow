@@ -551,4 +551,3 @@ ensemble_correct = (ensemble_cls_pred == data.y_test_cls)
 ensemble_incorrect = np.logical_not(ensemble_correct)
 
 # Best neural network
-
