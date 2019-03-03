@@ -387,7 +387,7 @@ def optimize(num_iterations_, x_train_, y_train_):
 
 # Create ensemble of neural networks.
 num_networks = 5
-num_iterations = 10
+num_iterations = 10000
 
 is_ensemble = True
 if is_ensemble:
@@ -551,3 +551,89 @@ ensemble_correct = (ensemble_cls_pred == data.y_test_cls)
 ensemble_incorrect = np.logical_not(ensemble_correct)
 
 # Best neural network
+print('test accuracies: {}'.format(test_accuracies))
+
+best_net = np.argmax(test_accuracies)
+print('best_net: {}'.format(best_net))
+
+print('test_accuracies[best_net]: {}'.format(test_accuracies[best_net]))
+
+best_net_pred_labels = pred_labels[best_net, :, :]
+best_net_cls_pred = np.argmax(best_net_pred_labels, axis=1)
+
+best_net_correct = (best_net_cls_pred == data.y_test_cls)
+best_net_incorrect = np.logical_not(best_net_correct)
+
+# Comparison of ensemble vs. the best single network
+print('np.sum(ensemble_correct): {}'.format(np.sum(ensemble_correct)))
+print('np.sum(best_net_correct): {}'.format(np.sum(best_net_correct)))
+
+ensemble_better = np.logical_and(best_net_incorrect, ensemble_correct)
+print('ensemble_better.sum(): {}'.format(ensemble_better.sum()))
+
+best_net_better = np.logical_and(best_net_correct, ensemble_incorrect)
+print('best_net_better.sum(): {}'.format(best_net_better.sum()))
+
+# Helper-functions for plotting and printing comparsions
+def plot_images_comparison(idx):
+    plot_images(images_=data.x_test[idx],
+                cls_true_=data.y_test_cls[idx],
+                ensemble_cls_pred=ensemble_cls_pred[idx],
+                best_cls_pred=best_net_cls_pred[idx])
+
+def print_labels(labels, idx, num=1):
+    # Select the relevant labels based on idx.
+    labels =labels[idx, :]
+
+    # Select the first num labels.
+    labels = labels[0:num, :]
+
+    # Round numbers to 2 decimal points so they are easier to read.
+    labels_rounded = np.round(labels, 2)
+
+    # Print the rounded labels.
+    print(labels_rounded)
+
+def print_labels_ensemble(idx, **kwargs):
+    print_labels(labels=ensemble_pred_labels, idx=idx, **kwargs)
+
+def print_labels_best_net(idx, **kwargs):
+    print_labels(labels=best_net_pred_labels, idx=idx, **kwargs)
+
+def print_labels_all_nets(idx):
+    for i in range(num_networks):
+        print_labels(labels=pred_labels[i, :, :], idx=idx, num=1)
+
+    # Examples: Ensemble is better than the best network
+    plot_images_comparison(idx=ensemble_better)
+
+    print_labels_ensemble(idx=ensemble_better, num=1)
+
+    print_labels_best_net(idx=ensemble_better, num=1)
+
+    print_labels_all_nets(idx=ensemble_better)
+
+    # Examles: Best network is bettern than ensemble
+    plot_images_comparison(idx=best_net_better)
+
+    print_labels_ensemble(idx=best_net_better, num=1)
+
+    print_labels_best_net(idx=best_net_better, num=1)
+
+    print_labels_all_nets(idx=best_net_better)
+
+    # Close TensorFlow Session
+    # This had been cmmented out in case you want to modify and experiment
+    # with the Notebook without having to restart it.
+    session.close()
+
+
+
+
+
+
+
+
+
+
+
