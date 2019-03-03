@@ -422,7 +422,7 @@ def predict_labels(images_):
 
     # Allocate an array for the predicted labels which
     # will be calculated in batches and filled into this array.
-    pred_labels = np.zeros(shape=(num_images, num_classes), dtype=np.float32)
+    pred_labels_ = np.zeros(shape=(num_images, num_classes), dtype=np.float32)
 
     # Now calculate the predicted labels for the batches.
     # We will just iterate through all the batches.
@@ -436,23 +436,23 @@ def predict_labels(images_):
         idx_j = min(idx_i + batch_size, num_images)
 
         # Create a feed-dict with the images between index i and j.
-        feed_dict = {x: images[idx_i:idx_j, :]}
+        feed_dict = {x: images_[idx_i:idx_j, :]}
 
         # Calculate the predicted labels using TensorFlow.
-        pred_labels[idx_i:idx_j] = session.run(y_pred, feed_dict=feed_dict)
+        pred_labels_[idx_i:idx_j] = session.run(y_pred, feed_dict=feed_dict)
 
         # Set the start-index for the next batch to the
         # end-index of the current batch.
         idx_i = idx_j
 
-    return pred_labels
+    return pred_labels_
 
 def correct_prediction(images_, labels_, cls_true_):
     # Calculate the predicted labels.
-    pred_labels = predict_labels(images_=images_)
+    pred_labels_ = predict_labels(images_=images_)
 
     # Calculate the predicted class-number for each image.
-    cls_pred = np.argmax(pred_labels, axis=1)
+    cls_pred = np.argmax(pred_labels_, axis=1)
 
     # Create a boolean array whether each image is correctly classified.
     correct = (cls_true_ == cls_pred)
@@ -493,4 +493,62 @@ def validation_accuracy():
     return classification_accuracy(correct)
 
 # Results and analysis
+def ensemble_predictions():
+    # Empty list of predicted labels for each of the neural networks.
+    pred_labels_ = []
+
+    # Classification accuracy on the test-set for each network.
+    test_accuracies_ = []
+
+    # Classification accuracy on the validation-set for each network.
+    val_accuracies_ = []
+
+    # For each neural network in the ensemble.
+    for idx in range(num_networks):
+        # Reload the variables into the TensorFlow graph.
+        saver.restore(sess=session, save_path=get_save_path(idx))
+
+        # Calculate the classification accuracy on the test-set.
+        test_acc = test_accuracy()
+
+        # Append the classification accuracy to the list.
+        test_accuracies_.append(test_acc)
+
+        # Calculate the classification accuracy on the validation-set.
+        val_acc = validation_accuracy()
+
+        # Append the classification accuracy to the list.
+        val_accuracies_.append(val_acc)
+
+        # Print status message.
+        msg = "Network: {0}, Accuracy on Validation-Set: {1:.4f}, Test-Set: {2:.4f}"
+        print(msg.format(idx, val_acc, test_acc))
+
+        # Calculate the predicted labels for the images in the test-set.
+        # This is already calculated in test_accuracy() above but
+        # it is re-calculated here to keep the code a bit simpler.
+        pred = predict_labels(images_=data.x_test)
+
+        # Appende the predicted labels to the list.
+        pred_labels_.append(pred)
+
+    return np.array(pred_labels_), np.array(test_accuracies_), np.array(val_accuracies_)
+
+pred_labels, test_accuracies, val_accuracies = ensemble_predictions()
+
+print("Mean test-set accuracy: {0:.4f}".format(np.mean(test_accuracies)))
+print("Min test-set accuracy: {0:.4f}".format(np.min(test_accuracies)))
+print("Max test-set accuracy: {0:.4f}".format(np.max(test_accuracies)))
+
+# Ensemble predictions
+ensemble_pred_labels = np.mean(pred_labels, axis=0)
+print('ensemble_pred_labels shape: {}'.format(ensemble_pred_labels.shape))
+
+ensemble_cls_pred = np.argmax(ensemble_pred_labels, axis=1)
+print('ensemble_cls_pred shape: {}'.format(ensemble_cls_pred.shape))
+
+ensemble_correct = (ensemble_cls_pred == data.y_test_cls)
+ensemble_incorrect = np.logical_not(ensemble_correct)
+
+# Best neural network
 
