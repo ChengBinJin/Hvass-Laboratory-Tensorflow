@@ -614,12 +614,97 @@ def plot_example_errors(cls_pred, correct):
                 cls_pred=cls_pred[0:9])
 
 # Helper-function to plot confusion matrix
+def plot_confusion_matrix(cls_pred):
+    # This is called from print_test_accuracy() below.
+
+    # cls_pred is an array of the predicted class-number for
+    # all images in the test-set.
+
+    # Get the confusion matrix using sklearn.
+    cm = confusion_matrix(y_true=cls_test,      # True class for test-set.
+                          y_pred=cls_pred)      # Predicted class.
+
+    # Print the confusion matrix as text.
+    for i in range(num_classes):
+        # Append the class-name to each line.
+        class_name = "({}) {}".format(i, class_names[i])
+        print(cm[i, :], class_name)
+
+    # Print the class-numbers for easy reference.
+    class_numbers = [" ({0})".format(i) for i in range(num_classes)]
+    print("".join(class_numbers))
 
 # Helper-functions for calculating classifications
+# Split the data-set in batches of this size to limit RAM usage.
+batch_size = 256
+
+def predict_cls(images, labels, cls_true):
+    # Number of images.
+    num_images = len(images)
+
+    # Allocate an array for the predicted classes which
+    # will be calculated in batches and filled into this array.
+    cls_pred = np.zeros(shape=num_images, dtype=np.int)
+
+    # Now calculate the predicted classes for the batches.
+    # We will just iterate through all the batches.
+    # There might be a more clever and Pythonic way of doing this.
+
+    # This starting index for the next batch is denoted i.
+    i = 0
+
+    while i < num_images:
+        # The ending index for the next batch is denoted j.
+        j = min(i + batch_size, num_images)
+
+        # Create a feed-dict with the images and labels
+        # between index i and j.
+        feed_dict = {x: images[i:j, :],
+                     y_true: labels[i:j, :]}
+
+        # Calculate the predicted class using TensorFlow.
+        cls_pred[i:j] = session.run(y_pred_cls, feed_dict=feed_dict)
+
+        # Set the start-index for the next batch to the
+        # end-index of the current batch.
+        i = j
+
+    # Create a boolean array whether each image is correctly classified.
+    correct = (cls_true == cls_pred)
+
+    return correct, cls_pred
+
+def predict_cls_test():
+    return predict_cls(images = images_test,
+                       labels = labels_test,
+                       cls_true = cls_test)
 
 # Helper-functions for the classification accuracy
+def classification_accuracy(correct):
+    # When averaging a boolean array, False means 0 and True means 1.
+    # So we are calculating: number of True / len(correct) which is
+    # the same as the classification accuracy.
+
+    # Return the classification accuracy
+    # and the number of correct classifications.
+    return correct.mean(), correct.sum()
 
 # Helper-function for showing the performance
 
 # Helper-function for plotting convolutional weights
 
+# Helper-function for plotting the output of convolutional layers
+
+# Examples of distorted input images
+
+# Perform optimization
+
+# Results
+
+# Convolutional Weights
+
+# Output of convolutional layers
+
+# Predicted class-labels
+
+# Close TensorFlow Session
