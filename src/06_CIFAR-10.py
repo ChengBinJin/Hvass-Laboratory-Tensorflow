@@ -486,8 +486,140 @@ output_conv1 = get_layer_output(layer_name='layer_conv1')
 outptu_conv2 = get_layer_output(layer_name='layer_conv2')
 
 # TensorFlow Run
-# Crate TensorFlow session
+# Creat TensorFlow session
+session = tf.Session()
 
 # Restore or Initialize variables
+save_dir = '../checkpoints/'
+
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+
+save_path = os.path.join(save_dir, 'cifar10_cnn')
+
+try:
+    print("Trying to restore last checkpoint ...")
+
+    # Use TensorFlow to find the latest checkpoint - if any.
+    last_chk_path = tf.train.latest_checkpoint(checkpoint_dir=save_dir)
+
+    # Try and load the data in the checkpoint.
+    saver.restore(session, save_path=last_chk_path)
+
+    # If we get to this point, the checkpoint was successfully loaded.
+    print("Restored checkpoint from:", last_chk_path)
+except:
+    # If the above failed for some reason, simply
+    # initialize all the variables for the TensorFlow graph.
+    print("Failed to restore checkpoint. Initializing variables instead.")
+    session.run(tf.global_variables_initializer())
 
 # Helper-function to get a random training-batch
+train_batch_size = 64
+
+def random_batch():
+    # Number of images in the training-set.
+    num_images = len(images_train)
+
+    # Create a random index.
+    idx = np.random.choice(num_images,
+                           size=train_batch_size,
+                           replace=False)
+
+    # Use the random index to select random images and labels.
+    x_batch = images_train[idx, :, :, :]
+    y_batch = labels_train[idx, :]
+
+    return x_batch, y_batch
+
+# Helper-function to perform optimization
+def optimize(num_iterations):
+    # Start-time used for printing time-usage below.
+    start_time = time.time()
+
+    for i in range(num_iterations):
+        # Get a batch of training examples.
+        # x_batch now holds a batch of images and
+        # y_true_batch are the true labels for those images.
+        x_batch, y_true_batch = random_batch()
+
+        # Put the batch into a dict with the proper names
+        # for placeholder variables in the TensorFlow graph.
+        feed_dict_train = {x: x_batch,
+                           y_true: y_true_batch}
+
+        # Run the optimizer using this batch of training data.
+        # TensorFlow assigns the variables in feed_dict_train
+        # to the placeholder variables and then runs the optimizer.
+        # We also want to retrieve the global_step counter.
+        i_global, _ = session.run([global_step, optimizer],
+                                  feed_dict=feed_dict_train)
+
+        # Print status to screen every 100 iterations (and last).
+        if (i_global % 100 == 0) or (i == num_iterations - 1):
+            # Calculate the accuracy on the training-batch.
+            batch_acc = session.run(accuracy,
+                                    feed_dict=feed_dict_train)
+
+            # Print status.
+            msg = "Global Step: {0:>6}, Training Batch Accuracy: {1:>6.1%}"
+            print(msg.format(i_global, batch_acc))
+
+        # Save a checkpoint to disk every 1000 iterations (and last).
+        if (i_global % 1000 == 0) or (i == num_iterations - 1):
+            # Save all variables of the TensorFlow graph to a
+            # checkpoint. Append the global_step counter
+            # to the filename so we save the last several checkpoints.
+            saver.save(session,
+                       save_path=save_path,
+                       global_step=global_step)
+
+            print("Saved checkpoint.")
+
+    # Ending time.
+    end_time = time.time()
+
+    # Difference between start and end-times.
+    time_dif = end_time - start_time
+
+    # Print the time-usage.
+    print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))
+
+# Helper-function to plot example errors
+def plot_example_errors(cls_pred, correct):
+    # This function is called from print_test_accuracy() below.
+
+    # cls_pred is an array of the predicted class-number for
+    # all images in the test-set.
+
+    # correct is a boolean array whether the predicted class
+    # is equal to the true class for each image in the test-set.
+
+    # Negate the boolean array.
+    incorrect = (correct == False)
+
+    # Get the images from the test-set that have been
+    # incorrectly classified.
+    images = images_test[incorrect]
+
+    # Get the predicted classes for those images.
+    cls_pred = cls_pred[incorrect]
+
+    # Get the true classes for those images.
+    cls_true = cls_test[incorrect]
+
+    # Plot the first 9 images.
+    plot_images(images_=images[0:9],
+                cls_true_=cls_true[0:9],
+                cls_pred=cls_pred[0:9])
+
+# Helper-function to plot confusion matrix
+
+# Helper-functions for calculating classifications
+
+# Helper-functions for the classification accuracy
+
+# Helper-function for showing the performance
+
+# Helper-function for plotting convolutional weights
+
