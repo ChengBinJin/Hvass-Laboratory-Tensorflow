@@ -690,8 +690,82 @@ def classification_accuracy(correct):
     return correct.mean(), correct.sum()
 
 # Helper-function for showing the performance
+def print_test_accuracy(show_example_errors=False,
+                        show_confusion_matrix=False):
+    # For all the images in the test-set,
+    # calculate the predicted classes and whether they are correct.
+    correct, cls_pred = predict_cls_test()
+
+    # Classification accuracy and the number of correct classifications.
+    acc, num_correct = classification_accuracy(correct)
+
+    # Number of images being classified.
+    num_images = len(correct)
+
+    # Print the accuracy.
+    msg = "Accuracy on Test-Set: {0:.1%} ({1} / {2})"
+    print(msg.format(acc, num_correct, num_images))
+
+    # Plot some examples of mis-classifications, if desired.
+    if show_example_errors:
+        print("Example errors:")
+        plot_example_errors(cls_pred=cls_pred, correct=correct)
+
+    # Plot the confusion matrix, if desired.
+    if show_confusion_matrix:
+        print("Confusion matrix:")
+        plot_confusion_matrix(cls_pred=cls_pred)
 
 # Helper-function for plotting convolutional weights
+def plot_conv_weights(weights, input_channel=0):
+    # Assuem weights are TensorFlow ops for 4-dim varaibles
+    # e.g. weights_conv1 or weights_conv2
+
+    # Retrievethe values of the weight-variables from TensorFlow.
+    # A feed-dict is not necessary because nothing is calculated.
+    w = session.run(weights)
+
+    # Print statistics for the weights.
+    print("Min:     {0:.5f}, Max:   {1:.5f}".format(w.min(), w.max()))
+    print("Mean:    {0:.5f}, Stdev: {1:.5f}".format(w.mean(), w.std()))
+
+    # Get the lowest and highest values for the weights.
+    # This is used to correct the colour intensity across
+    # the images so they can be compared with each other.
+    w_min = np.min(w)
+    w_max = np.max(w)
+    abs_max = max(abs(w_min), abs(w_max))
+
+    # Number of filters used in the conv. layer.
+    num_filters = w.shape[3]
+
+    # Number of grids to plot.
+    # Rounded-up, square-root of the number of filters.
+    num_grids = math.ceil(math.sqrt(num_filters))
+
+    # Create figure with  grid of sub-plots.
+    fig, axes = plt.subplots(num_grids, num_grids)
+
+    # Plot all the filter-weights.
+    for i, ax in enumerate(axes.flat):
+        # Only plot the valid filter-weights.
+        if i < num_filters:
+            # Get the weights for the i't h filter of the input channel.
+            # Teh format of this 4-dim tensor is determined by the
+            # TensorFlow API. See Tutorial #02 for more details.
+            img = w[:, :, input_channel, i]
+
+            # Plot image.
+            ax.imshow(img, vmin=-abs_max, vmax=abs_max,
+                      interpolation='nearest', cmap='seismic')
+
+        # Remove ticks from the plot.
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Ensure the plot is shown correctly with multiple plots
+    # in a single Notebook cell.
+    plt.show()
 
 # Helper-function for plotting the output of convolutional layers
 
