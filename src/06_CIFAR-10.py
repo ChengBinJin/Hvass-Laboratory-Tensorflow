@@ -157,16 +157,12 @@ distorted_images = pre_process(images_=x, training=True)
 
 # Helper-function for creating Main Processing
 # Helper-function for creating new variables
-def new_weights(shape, name):
-    with tf.variable_scope(name):
-        weights = tf.Variable(initial_value=tf.truncated_normal(shape, stddev=0.05), name='weights')
-
+def new_weights(shape):
+    weights = tf.get_variable(initializer=tf.truncated_normal(shape, stddev=0.05), name='weights')
     return weights
 
-def new_biases(length, name):
-    with tf.variable_scope(name):
-        biases = tf.Variable(initial_value=tf.constant(0.05, shape=[length]), name='biases')
-
+def new_biases(length):
+    biases = tf.get_variable(initializer=tf.constant(0.05, shape=[length]), name='biases')
     return biases
 
 # Helper-function for creating a new Convolutional Layer
@@ -175,17 +171,16 @@ def new_conv_layer(input_,                          # The previous layer.
                    filter_size,                     # Width and height of each filter.
                    num_filters,                     # Number of filters.
                    use_pooling=True,
-                   use_relu=True,
-                   name=None):               # Use 2x2 max-pooling.
+                   use_relu=True):                  # Use 2x2 max-pooling.
     # Shape of the filter-weights for the convolution.
     # This format is determined by the TensorFlow API.
     shape = [filter_size, filter_size, num_input_channels, num_filters]
 
     # Create new weights aka. filters with the given shape.
-    weights = new_weights(shape=shape, name=name)
+    weights = new_weights(shape=shape)
 
     # Create new biases, one for each filter.
-    biases = new_biases(length=num_filters, name=name)
+    biases = new_biases(length=num_filters)
 
     # Create the TensorFlow operation for convolution.
     # Note the strides are set to 1 in all dimension.
@@ -259,12 +254,11 @@ def flatten_layer(layer):
 def new_fc_layer(input_,                # The previous layer.
                  num_inputs,            # Num. inputs from prev. layer.
                  num_outputs,           # Num. outputs.
-                 use_relu=True,         # Use Rectified Linear Unit (ReLU)?
-                 name=None):
+                 use_relu=True):        # Use Rectified Linear Unit (ReLU)?
 
     # Create new weights and biases.
-    weights = new_weights(shape=[num_inputs, num_outputs], name=name)
-    biases = new_biases(length=num_outputs, name=name)
+    weights = new_weights(shape=[num_inputs, num_outputs])
+    biases = new_biases(length=num_outputs)
 
     # Calculate the layer as the matrix multiplication of
     # the input and weights, and then add the bias-values.
@@ -338,82 +332,84 @@ def batch_norm(x, name, _ops, is_train=True):
 def main_network(images, training):
     batch_ops = []
 
-    layer_conv1 = new_conv_layer(input_=images,
-                                 num_input_channels=num_channels,
-                                 filter_size=filter_size1,
-                                 num_filters=num_filters1,
-                                 use_pooling=False,
-                                 use_relu=False,
-                                 name='layer_conv1')
-    print('layer_conv1 shape: {}'.format(layer_conv1.get_shape().as_list()))
+    with tf.variable_scope('layer_conv1'):
+        layer_conv1 = new_conv_layer(input_=images,
+                                     num_input_channels=num_channels,
+                                     filter_size=filter_size1,
+                                     num_filters=num_filters1,
+                                     use_pooling=False,
+                                     use_relu=False)
+        print('layer_conv1 shape: {}'.format(layer_conv1.get_shape().as_list()))
 
-    layer_batch1 = batch_norm(x=layer_conv1, name='batch_1', _ops=batch_ops, is_train=training)
-    print('layer_batch1 shape: {}'.format(layer_batch1.get_shape().as_list()))
+        layer_batch1 = batch_norm(x=layer_conv1, name='batch_1', _ops=batch_ops, is_train=training)
+        print('layer_batch1 shape: {}'.format(layer_batch1.get_shape().as_list()))
 
-    layer_relu1 = tf.nn.relu(features=layer_batch1)
-    print('layer_relu1 shape: {}'.format(layer_relu1.get_shape().as_list()))
+        layer_relu1 = tf.nn.relu(features=layer_batch1)
+        print('layer_relu1 shape: {}'.format(layer_relu1.get_shape().as_list()))
+        print(layer_relu1)
 
-    layer_pool1 = tf.nn.max_pool(value=layer_relu1,
-                                 ksize=[1, 2, 2, 1],
-                                 strides=[1, 2, 2, 1],
-                                 padding='SAME')
-    print('layer_pool1 shape: {}'.format(layer_pool1.get_shape().as_list()))
+        layer_pool1 = tf.nn.max_pool(value=layer_relu1,
+                                     ksize=[1, 2, 2, 1],
+                                     strides=[1, 2, 2, 1],
+                                     padding='SAME')
+        print('layer_pool1 shape: {}'.format(layer_pool1.get_shape().as_list()))
 
-    layer_conv2 = new_conv_layer(input_=layer_pool1,
-                                 num_input_channels=num_filters1,
-                                 filter_size=filter_size2,
-                                 num_filters=num_filters2,
-                                 use_pooling=False,
-                                 use_relu=False,
-                                 name='layer_conv2')
-    print('layer_conv2 shape: {}'.format(layer_conv2.get_shape().as_list()))
+    with tf.variable_scope('layer_conv2'):
+        layer_conv2 = new_conv_layer(input_=layer_pool1,
+                                     num_input_channels=num_filters1,
+                                     filter_size=filter_size2,
+                                     num_filters=num_filters2,
+                                     use_pooling=False,
+                                     use_relu=False)
+        print('layer_conv2 shape: {}'.format(layer_conv2.get_shape().as_list()))
 
-    layer_batch2 = batch_norm(x=layer_conv2, name='batch_2', _ops=batch_ops, is_train=training)
-    print('layer_batch2 shape: {}'.format(layer_batch2.get_shape().as_list()))
+        layer_batch2 = batch_norm(x=layer_conv2, name='batch_2', _ops=batch_ops, is_train=training)
+        print('layer_batch2 shape: {}'.format(layer_batch2.get_shape().as_list()))
 
-    layer_relu2 = tf.nn.relu(features=layer_batch2)
-    print('layer_relu2 shape: {}'.format(layer_relu2.get_shape().as_list()))
+        layer_relu2 = tf.nn.relu(features=layer_batch2)
+        print('layer_relu2 shape: {}'.format(layer_relu2.get_shape().as_list()))
+        print(layer_relu2)
 
-    layer_pool2 = tf.nn.max_pool(value=layer_relu2,
-                                 ksize=[1, 2, 2, 1],
-                                 strides=[1, 2, 2, 1],
+        layer_pool2 = tf.nn.max_pool(value=layer_relu2,
+                                     ksize=[1, 2, 2, 1],
+                                     strides=[1, 2, 2, 1],
                                  padding='SAME')
 
     layer_flat, num_features = flatten_layer(layer_pool2)
     print('layer_flat shape: {}'.format(layer_flat.get_shape().as_list()))
 
-    layer_fc1 = new_fc_layer(input_=layer_flat,
-                             num_inputs=num_features,
-                             num_outputs=fc_size1,
-                             use_relu=False,
-                             name='layer_fc1')
-    print('layer_fc1 shape: {}'.format(layer_fc1.get_shape().as_list()))
+    with tf.variable_scope('layer_fc1'):
+        layer_fc1 = new_fc_layer(input_=layer_flat,
+                                 num_inputs=num_features,
+                                 num_outputs=fc_size1,
+                                 use_relu=False)
+        print('layer_fc1 shape: {}'.format(layer_fc1.get_shape().as_list()))
 
-    layer_batch3 = batch_norm(x=layer_fc1, name='batch_3', _ops=batch_ops, is_train=training)
-    print('layer_batch3 shape: {}'.format(layer_batch3.get_shape().as_list()))
+        layer_batch3 = batch_norm(x=layer_fc1, name='batch_3', _ops=batch_ops, is_train=training)
+        print('layer_batch3 shape: {}'.format(layer_batch3.get_shape().as_list()))
 
-    layer_relu3 = tf.nn.relu(features=layer_batch3)
-    print('layer_relu3 shape: {}'.format(layer_relu3.get_shape().as_list()))
+        layer_relu3 = tf.nn.relu(features=layer_batch3)
+        print('layer_relu3 shape: {}'.format(layer_relu3.get_shape().as_list()))
 
-    layer_fc2 = new_fc_layer(input_=layer_relu3,
-                             num_inputs=fc_size1,
-                             num_outputs=fc_size2,
-                             use_relu=False,
-                             name='layer_fc2')
-    print('layer_fc2 shape: {}'.format(layer_fc2.get_shape().as_list()))
+    with tf.variable_scope('layer_fc2'):
+        layer_fc2 = new_fc_layer(input_=layer_relu3,
+                                 num_inputs=fc_size1,
+                                 num_outputs=fc_size2,
+                                 use_relu=False)
+        print('layer_fc2 shape: {}'.format(layer_fc2.get_shape().as_list()))
 
-    layer_batch4 = batch_norm(x=layer_fc2, name='batch_4', _ops=batch_ops, is_train=training)
-    print('layer_batch4 shape: {}'.format(layer_batch4.get_shape().as_list()))
+        layer_batch4 = batch_norm(x=layer_fc2, name='batch_4', _ops=batch_ops, is_train=training)
+        print('layer_batch4 shape: {}'.format(layer_batch4.get_shape().as_list()))
 
-    layer_relu4 = tf.nn.relu(features=layer_batch4)
-    print('layer_relu4 shape: {}'.format(layer_relu4.get_shape().as_list()))
+        layer_relu4 = tf.nn.relu(features=layer_batch4)
+        print('layer_relu4 shape: {}'.format(layer_relu4.get_shape().as_list()))
 
-    y_pred = new_fc_layer(input_=layer_relu4,
-                          num_inputs=fc_size2,
-                          num_outputs=num_classes,
-                          use_relu=False,
-                          name='layer_fc3')
-    print('y_pred shape: {}'.format(y_pred.get_shape().as_list()))
+    with tf.variable_scope('layer_fc3'):
+        y_pred = new_fc_layer(input_=layer_relu4,
+                              num_inputs=fc_size2,
+                              num_outputs=num_classes,
+                              use_relu=False)
+        print('y_pred shape: {}'.format(y_pred.get_shape().as_list()))
 
     loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=y_pred,
                                                       labels=y_true)
@@ -437,9 +433,12 @@ def create_network(training):
     return y_pred, loss, batch_ops
 
 # Create Neural Network for Training Phase
-global_step = tf.Variable(initial_value=0,
-                          name='global_step',
-                          trainable=False)
+# global_step = tf.Variable(initial_value=0,
+#                           name='global_step',
+#                           trainable=False)
+global_step = tf.get_variable(initializer=0,
+                              name='global_step',
+                              trainable=False)
 
 _, loss, batch_ops = create_network(training=True)
 
@@ -456,6 +455,17 @@ accuracy = tf.reduce_mean(input_tensor=tf.cast(x=correct_prediction, dtype=tf.fl
 # Saver
 saver = tf.train.Saver()
 
+def show_all_variables():
+    total_count = 0
+    for idx, op in enumerate(tf.trainable_variables()):
+        shape = op.get_shape()
+        count = np.prod(shape)
+        print("[%2d] %s %s = %s" % (idx, op.name, shape, count))
+        total_count += int(count)
+    print("[Total] variable size: %s" % "{:,}".format(total_count))
+
+show_all_variables()
+
 # Getting the Weights
 def get_weights_variable(layer_name):
     # Retrieve an existing variable named 'weights' in the scope
@@ -463,8 +473,8 @@ def get_weights_variable(layer_name):
     # This is awkward because the TensorFlow function was
     # really intended for another purpose.
 
-    with tf.variable_scope(os.path.join('network', layer_name), reuse=True):
-        variable = tf.get_variable('weights')
+    with tf.variable_scope('network/' + layer_name, reuse=True):
+        variable = tf.get_variable(name='weights')
 
     return variable
 
@@ -475,7 +485,7 @@ weights_conv2 = get_weights_variable(layer_name='layer_conv2')
 def get_layer_output(layer_name):
     # The name of the last operation of the convolutional layer.
     # This assumes you are using Relu as the activation-function
-    tensor_name = os.path.join('network', layer_name, 'ReLu:0')
+    tensor_name = 'network/' + layer_name + '/Relu:0'
 
     # Get the tensor with this name.
     tensor = tf.get_default_graph().get_tensor_by_name(tensor_name)
@@ -776,6 +786,12 @@ def plot_conv_weights(weights, input_channel=0):
 # Results
 
 # Convolutional Weights
+
+
+
+
+
+
 
 # Output of convolutional layers
 
