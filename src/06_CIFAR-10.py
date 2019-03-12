@@ -778,23 +778,129 @@ def plot_conv_weights(weights, input_channel=0):
     plt.show()
 
 # Helper-function for plotting the output of convolutional layers
+def plot_layer_output(layer_output, image):
+    # Assume layer_output is a 4-dim tensor
+    # e.g. output_conv1 or output_conv2.
+
+    # Create a feed-dict which holds the single input image.
+    # Note taht TensorFlow needs a list of images.
+    # so we just create a list with this one image.
+    feed_dict = {x: [image]}
+
+    # Retrieve the output of the layer after inputting this iamge.
+    values = session.run(layer_output, feed_dict=feed_dict)
+
+    # Get the lowest and highest values.
+    # This is used to correct the colour intensity across
+    # the iamges so they can be compared with each oterh.
+    values_min = np.min(values)
+    values_max = np.max(values)
+
+    # Number of image channels output by the conv. layer.
+    num_images = values.shape[3]
+
+    # Number of grid-cells to plot.
+    # Rounded-up, square-root of the number of filters.
+    num_grids = math.ceil(math.sqrt(num_images))
+
+    # Create figure with a grid of sub-plots.
+    fig, axes = plt.subplots(num_grids, num_grids)
+
+    # Plot all the filter-weights.
+    for i, ax in enumerate(axes.flat):
+        # Only plot the valid image-channels.
+        if i < num_images:
+            # Get the images for the i'th output channel.
+            img = values[0, :, :, i]
+
+            # Plot iamge.
+            ax.imshow(img, vmin=values_min, vmax=values_max,
+                      interpolation='nearest', cmap='binary')
+
+        # Remove ticks from the plot.
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Ensure the plot is shown correctly with multiple plots
+    # in a single Notebook cell.
+    plt.show()
 
 # Examples of distorted input images
+def plot_distorted_image(image, cls_true):
+    # Repeat the input image 9 times.
+    image_duplicates = np.repeat(image[np.newaxis, :, :, :], 9, axis=0)
+
+    # Create a feed-dict for TensorFlow.
+    feed_dict = {x: image_duplicates}
+
+    # Calculate only the pre-processing of the tensorFlow graph
+    # which distorts the images in the feed-dict.
+    result = session.run(distorted_images, feed_dict=feed_dict)
+
+    # Plot the images.
+    plot_images(images_=result, cls_true_=np.repeat(cls_true, 9))
+
+def get_test_image(i):
+    return images_test[i, :, :, :], cls_test[i]
+
+img, cls = get_test_image(16)
+
+plot_distorted_image(image=img, cls_true=cls)
 
 # Perform optimization
+is_run = True
+if is_run:
+    optimize(num_iterations=150000)  # 150,000
 
 # Results
+print_test_accuracy(show_example_errors=True,
+                    show_confusion_matrix=True)
 
 # Convolutional Weights
-
-
-
-
-
-
+plot_conv_weights(weights=weights_conv1, input_channel=0)
+plot_conv_weights(weights=weights_conv2, input_channel=0)
 
 # Output of convolutional layers
+def plot_image(image):
+    # Create figure with sub-plots.
+    fig, axes = plt.subplots(1, 2)
+
+    # References to the sub-plots.
+    ax0 = axes.flat[0]
+    ax1 = axes.flat[1]
+
+    # Show raw and smoothened images in sub-plots.
+    ax0.imshow(image, interpolation='nearest')
+    ax1.imshow(image, interpolation='spline16')
+
+    # Set labels
+    ax0.set_xlabel('Raw')
+    ax1.set_xlabel('Smooth')
+
+    # Ensure the plot is shown correctly with multiple plots
+    # in a single Notebook cell.
+    plt.show()
+
+img, cls = get_test_image(16)
+plot_image(img)
+
+plot_layer_output(output_conv1, image=img)
+plot_layer_output(outptu_conv2, image=img)
 
 # Predicted class-labels
+label_pred, cls_pred = session.run([y_pred, y_pred_cls],
+                                   feed_dict={x: [img]})
+
+# Set the ronding options for numpy.
+np.set_printoptions(precision=3, suppress=True)
+
+# Print the predicted label.
+print(label_pred[0])
+
+for idx in range(len(class_names)):
+    print(idx, class_names[idx])
 
 # Close TensorFlow Session
+# This has been commented out in case you want to modify and experiment
+# with the Notebook without having to restart it.
+session.close()
