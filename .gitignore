@@ -2,5 +2,6 @@ src/.idea
 src/idea/vcs.xml
 src/__pycache__
 data/
+inception/
 checkpoints/
 .DS_Store

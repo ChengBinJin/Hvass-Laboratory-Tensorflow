@@ -69,7 +69,7 @@ data_dir = "../inception/"
 path_uid_to_cls = "imagenet_2012_challenge_label_map_proto.pbtxt"
 
 # File containing the mappings between uid and string. (Downloaded)
-path_uid_to_name = "imagenet_synset_to_huma_label_map.txt"
+path_uid_to_name = "imagenet_synset_to_human_label_map.txt"
 
 # File containing the TensorFlow graph definition. (Downloaded)
 path_graph_def = "classify_image_graph_def.pb"
@@ -456,6 +456,61 @@ def process_images(fn, images=None, image_paths=None):
     return result
 
 
-# def transfer_values_cache(cache_path, model, images=None, image_paths=None):
+def transfer_values_cache(cache_path, model, images=None, image_paths=None):
+    # This function either loads transfer-values if they have
+    # already been calculated, otherwise it calculates the values
+    # and saves them to a file that can be re-loaded again later.
 
-# if __name__ == '__main__':
+    # Because the transfer-values can be expensive to compute, it can
+    # be useful to cache the values through this function instead
+    # of calling transfer_values() directly on the Inception model.
+
+    # See Tutorial #08 for an examle on how to use this function.
+
+    # param cache_path: File containing the cached trasfer-values for the images.
+    # param model: Instance of the Inception model.
+    # param images: 4-dim array with images. [image_number, height, width, colour_channel]
+    # paramimage_paths: Array of file-paths for images (must be jpeg-format).
+    # return: The transfer-values from the Inception model for those images.
+
+    # Helper-function for processing the images if the cache-file doest not exist
+
+    # This is needed because we cannot supply both fn=process_images
+    # and fn=model.transfer_values to the cache()-function.
+    def fn():
+        return process_images(fn=model.transfer_value, images=images,
+                              image_paths=image_paths)
+
+    # Read the transfer-values from a cache-file, or calculate them if the file
+    # doest not exist.
+    transfer_values = cache(cache_path=cache_path, fn=fn)
+
+    return transfer_values
+
+##########################################################################################
+# Example usage.
+
+if __name__ == '__main__':
+    print(tf.__version__)
+
+    # Download Inception model if not already done.
+    maybe_download()
+
+    # Load the Inception model so it is ready for classifying images.
+    model = Inception()
+
+    # Path for a jpeg-image that is included in the downloaded data.
+    image_path = os.path.join(data_dir, 'cropped_panda.jpg')
+
+    # Use the Inception model to classify the image.
+    pred = model.classify(image_path=image_path)
+
+    # Print the scores and names for the top-10 predictions
+    model.print_scores(pred=pred, k=10)
+
+    # Close the TensorFlow session.
+    model.close()
+
+    # Transfer Learning is demonstrated in Tutorial #08.
+
+##########################################################################################
