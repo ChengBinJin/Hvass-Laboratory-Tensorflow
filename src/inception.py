@@ -390,7 +390,7 @@ class Inception:
         #
         # It may take several hours or more to calculate the transfer-values
         # for all images in a data-set. It is therefore useful to cache the
-        # results using the function tranfer_values_cache() below.
+        # results using the function transfer_values_cache() below.
         #
         # param image_path: The input image is a jpeg-file with this file-path.
         # param image:      The input image is a 3-dim array which is already decoded.
@@ -478,7 +478,7 @@ def transfer_values_cache(cache_path, model, images=None, image_paths=None):
     # This is needed because we cannot supply both fn=process_images
     # and fn=model.transfer_values to the cache()-function.
     def fn():
-        return process_images(fn=model.transfer_value, images=images,
+        return process_images(fn=model.transfer_values, images=images,
                               image_paths=image_paths)
 
     # Read the transfer-values from a cache-file, or calculate them if the file
