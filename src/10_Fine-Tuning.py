@@ -1,16 +1,16 @@
 # Imports
 import os
-# import PIL
+import PIL
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-# from tensorflow.python.keras.models import Model, Sequential
-# from tensorflow.python.keras.layers import Dense, Flatten, Dropout
+from tensorflow.python.keras.models import Model, Sequential
+from tensorflow.python.keras.layers import Dense, Flatten, Dropout
 from tensorflow.python.keras.applications import VGG16
-# from tensorflow.python.keras.applications.vgg16 import preprocess_input, decode_predictions
+from tensorflow.python.keras.applications.vgg16 import preprocess_input, decode_predictions
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
-# from tensorflow.python.keras.optimizers import Adam, RMSprop
+from tensorflow.python.keras.optimizers import Adam, RMSprop
 
 print('- TensorFlow version: {}'.format(tf.__version__))
 
@@ -266,7 +266,100 @@ def plot_training_history(history):
 
 
 # Example Predictions
+def predict(image_path):
+    # Load and resize the image using PIL.
+    img = PIL.Image.open(image_path)
+    img_resized = img.resize(input_shape, PIL.Image.LANCZOS)
+
+    # Plot the image.
+    plt.imshow(img_resized)
+    plt.show()
+
+    # Convert the PIL iamge to a nupy-array with the proper shape.
+    img_array = np.expand_dims(np.array(img_resized), axis=0)
+
+    # Use the VGG16 model to make a prediction.
+    # This outputs an array with 1000 numbers corresponding to
+    # the classes of the ImageNet-dataset.
+    pred = model.predict(img_array)
+
+    # Decode the output of the VGG16 model.
+    pred_decoded = decode_predictions(pred)[0]
+
+    # Print the predictions.
+    for code, name, score in pred_decoded:
+        print("{0:>6.2%} : {1}".format(score, name))
+
+predict(image_path='../images/parrot_cropped1.jpg')
+predict(image_path=image_paths_train[0])
+predict(image_path=image_paths_train[1])
+predict(image_path=image_paths_test[0])
 
 # Transfer Learning
+model.summary()
+transfer_layer = model.get_layer('block5_pool')
+print('transfer_layer output: {}'.format(transfer_layer.output.shape))
+
+conv_model = Model(inputs=model.input,
+                   outputs=transfer_layer.output)
+# Start a new Keras sequential model.
+new_model = Sequential()
+
+# Add the convolutional part of the VGG16 model from above.
+new_model.add(conv_model)
+
+# Flatten the output of the VGG16 model because it is from
+# a convolutional layer
+new_model.add(Flatten())
+new_model.add(Flatten())
+
+# Add a dense (aka. fully-conncected) layer.
+# THis is for combining features that the VGG16 model has
+# recognized in the image.
+new_model.add(Dense(1024, activation='relu'))
+
+# Add a dropout-layer which may prevent overfitting and
+# imporve generalization ability to unseen data e.g. the test-set.
+new_model.add(Dropout(0.5))
+
+# Add the final layer for the actual classification.
+new_model.add(Dense(num_classes, activation='softmax'))
+
+optimizer = Adam(lr=1e-5)
+
+loss = 'categorical_crossentropy'
+metrics = ['categorical_accuracy']
+
+def print_layer_trainable():
+    for layer in conv_model.layers:
+        print("{0}:\t{1}".format(layer.trainable, layer.name))
+
+print_layer_trainable()
+
+conv_model.trainable = False
+
+for layer in conv_model.layers:
+    layer.trainable = False
+
+print_layer_trainable()
+
+new_model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+
+epochs = 20
+steps_per_epoch = 100
+
+history = new_model.fit_generator(generator=generator_train,
+                                  epochs=epochs,
+                                  steps_per_epoch=steps_per_epoch,
+                                  class_weight=class_weight,
+                                  validation_data=generator_test,
+                                  validation_steps=steps_test)
+
+plot_training_history(history)
+
+result = new_model.evaluate_generator(generator_test, steps=steps_test)
+print("Test-set clasification accuracy: {0:.2%}".format(result[1]))
+
+example_errors()
 
 # Fine-Tuning
