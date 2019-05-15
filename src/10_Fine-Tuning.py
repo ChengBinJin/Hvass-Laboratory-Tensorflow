@@ -363,3 +363,30 @@ print("Test-set clasification accuracy: {0:.2%}".format(result[1]))
 example_errors()
 
 # Fine-Tuning
+conv_model.trainable = True
+
+for layer in conv_model.layers:
+    # Boolean whtether this layer is trainable.
+    trainable = ('block5' in layer.name or 'block4' in layer.name)
+
+    # Set the Lay's boll
+    layer.trainable = trainable
+
+optimizer_fine = Adam(lr=1e-7)
+new_model.compile(optimizer=optimizer_fine, loss=loss, metrics=metrics)
+
+history = new_model.fit_generator(generator=generator_train,
+                                  epochs=epochs,
+                                  steps_per_epoch=steps_per_epoch,
+                                  class_weight=class_weight,
+                                  validation_data=generator_test,
+                                  validation_steps=steps_test)
+
+plot_training_history(history)
+
+result = new_model.evaluate_generator(generator_test, steps=steps_test)
+print("Test-set classification accuracy: {0:.2%}".format(result[1]))
+
+example_errors()
+
+
