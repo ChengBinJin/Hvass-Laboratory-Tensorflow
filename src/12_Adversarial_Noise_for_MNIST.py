@@ -419,4 +419,31 @@ def print_test_accuracy(show_example_errors=False, show_confusion_matrix=False):
 optimize(num_iterations=1000)
 print_test_accuracy(show_example_errors=True)
 
-#
+
+
+# Find the adversarial noise
+
+# Adversarial noise for all target-classes
+
+# Plot the adversarial noise for all target-classes
+
+
+
+# Immunity to adversarial noise
+# Helper-function to make a neural network immune to noise
+
+# Make immune to noise for target-class 3
+
+# make immune to noise for all target-classes
+
+
+
+# Make immune to all target-classes (double runs)
+
+# Plot the adversarial noise
+
+# Performance on clean images
+
+
+
+# Close TensorFlow Session
