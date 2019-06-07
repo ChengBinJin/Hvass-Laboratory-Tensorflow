@@ -419,13 +419,73 @@ def print_test_accuracy(show_example_errors=False, show_confusion_matrix=False):
 optimize(num_iterations=1000)
 print_test_accuracy(show_example_errors=True)
 
-
-
 # Find the adversarial noise
+init_noise()
+
+optimize(num_iterations=1000, adversary_target_cls=3)
+
+plot_noise()
+
+print_test_accuracy(show_example_errors=True,
+                    show_confusion_matrix=True)
 
 # Adversarial noise for all target-classes
+def find_all_noise(num_iterations=1000):
+    # Adversarial noise for all target-classes.
+    all_noise = []
+
+    # For each target-class.
+    for i in range(num_classes):
+        print("Finding adversarial noise for target-class:", i)
+
+        # Reset the adversarial noise to zero.
+        init_noise()
+
+        # Optimize the adversarial noise.
+        optimize(num_iterations=num_iterations,
+                 adversary_target_cls=i)
+
+        # Get the adversarial noise from inside the TensorFlow graph.
+        noise = get_noise()
+
+        # Append the noise to the array.
+        all_noise.append(noise)
+
+        # Print newline.
+        print()
+
+    return all_noise
+
+all_noise = find_all_noise(num_iterations=300)
 
 # Plot the adversarial noise for all target-classes
+def plot_all_noise(all_noise):
+    # Create figure with 10 sub-plots.
+    fig, axes = plt.subplots(2, 5)
+    fig.subplots_adjust(hspace=0.2, wspace=0.1)
+
+    # For each sub-plot.
+    for i, ax in enumerate(axes.flat):
+        # Get the adversarial noise for the i'th target-class.
+        noise = all_noise[i]
+
+        # Plot the noise.
+        ax.imshow(noise,
+                  cmap='seismic', interpolation='nearest',
+                  vmin=-1.0, vmax=1.0)
+
+        # Show the classes as the label on the x-axis.
+        ax.set_xlabel(i)
+
+        # Remove ticks from the plot.
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Ensure the plot is shown correctly with multiple plots
+    # in a single Notebook cell.
+    plt.show()
+
+plot_all_noise(all_noise)
 
 
 
