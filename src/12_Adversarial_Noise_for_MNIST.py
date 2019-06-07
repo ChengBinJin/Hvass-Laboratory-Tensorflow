@@ -491,10 +491,50 @@ plot_all_noise(all_noise)
 
 # Immunity to adversarial noise
 # Helper-function to make a neural network immune to noise
+def make_immune(target_cls, num_iterations_adversary=500, num_iterations_immune=200):
+    print("Target-class:", target_cls)
+    print("Finding adversarial noise ...")
+
+    # Find the adversarial noise.
+    optimize(num_iterations=num_iterations_adversary,
+             adversary_target_cls=target_cls)
+
+    # Newline.
+    print()
+
+    # Print classification accuracy.
+    print_test_accuracy(show_example_errors=False,
+                        show_confusion_matrix=False)
+
+    # Newline.
+    print()
+
+    print("Making the neural network immune to the noise ...")
+
+    # Try and make the neural network immune to this noise.
+    # Note that the adversarial noise has not been reset to zero
+    # so the x_noise variable still holds the noise.
+    # So we are training the neural network to ignore the noise.
+    optimize(num_iterations=num_iterations_immune)
+
+    # Newline.
+    print()
+
+    # Print classification accuracy.
+    print_test_accuracy(show_example_errors=False,
+                        show_confusion_matrix=False)
 
 # Make immune to noise for target-class 3
+make_immune(target_cls=3)
+
+make_immune(target_cls=3)
 
 # make immune to noise for all target-classes
+for i in range(10):
+    make_immune(target_cls=i)
+
+    # Print newline.
+    print()
 
 
 
