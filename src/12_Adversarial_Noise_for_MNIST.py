@@ -537,13 +537,29 @@ for i in range(10):
     print()
 
 
-
 # Make immune to all target-classes (double runs)
+for i in range(10):
+    make_immune(target_cls=i)
+
+    # Print newline.
+    print()
+
+    make_immune(target_cls=i)
+
+    # Print newline
+    print()
 
 # Plot the adversarial noise
+plot_noise()
+
+print_test_accuracy(show_example_errors=True,
+                    show_confusion_matrix=True)
 
 # Performance on clean images
+init_noise()
 
-
+print_test_accuracy(show_example_errors=True,
+                    show_confusion_matrix=True)
 
 # Close TensorFlow Session
+session.close()
