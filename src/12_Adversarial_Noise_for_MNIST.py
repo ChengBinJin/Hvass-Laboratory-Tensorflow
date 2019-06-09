@@ -419,9 +419,8 @@ def print_test_accuracy(show_example_errors=False, show_confusion_matrix=False):
 optimize(num_iterations=1000)
 print_test_accuracy(show_example_errors=True)
 
-
-
 # Find the adversarial noise
+
 
 # Adversarial noise for all target-classes
 
