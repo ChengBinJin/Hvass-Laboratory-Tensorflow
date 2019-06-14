@@ -201,3 +201,33 @@ def optimize(num_iterations):
         # Update the total number of iterations performed.
         total_iterations += num_iterations
 
+# Helper-function to plot example errors
+
+# Helper-function to plot confusion matrix
+
+# Helper-function for showing the performance
+
+
+
+# Performance before any optimization
+
+# Performance after 10,000 optimization iterations
+
+# Optimizing the Input Images
+
+
+
+# Helper-function for getting the names of convolutional layers
+
+# Helper-function for finding the input image
+
+# First Convolutional Layer
+
+
+
+# Second Convolutional Layer
+
+# Final Output Layer
+
+# Close TensorFlow Session
+
