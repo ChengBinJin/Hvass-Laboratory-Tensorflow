@@ -78,7 +78,7 @@ def plot_images10(images, smooth=True):
     fig, axes = plt.subplots(2, 5)
 
     # Adjust vertical spacing.
-    fig.suplots_adjust(hspace=0.1, wspace=0.1)
+    fig.subplots_adjust(hspace=0.1, wspace=0.1)
 
     # For each entry in the grid.
     for i, ax in enumerate(axes.flat):
@@ -503,9 +503,17 @@ def optimize_images(conv_id=None, num_iterations=30):
     # Plot the images.
     plot_images10(images=images)
 
+# First Convolutional Layer
+optimize_images(conv_id=0)
+
 # Second Convolutional Layer
+optimize_images(conv_id=1)
 
 # Final Output Layer
+image = optimize_image(conv_id=None, feature=2, num_iterations=10, show_progress=True)
+plot_image(image)
+
+optimize_images(conv_id=None)
 
 # Close TensorFlow Session
-
+session.close()
