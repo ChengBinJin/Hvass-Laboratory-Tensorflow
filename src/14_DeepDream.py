@@ -2,7 +2,7 @@
 # DeepDream
 # Introduction
 # Flowchart
-from IPython.display import Image, display
+from IPython.display import display
 
 # Recursive Optimization
 
