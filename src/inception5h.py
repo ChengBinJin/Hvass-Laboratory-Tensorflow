@@ -37,7 +37,7 @@ import os
 
 # Internet URL for the tar-file with the Inception model.
 # Note that this might change in the future and will need to be updated.
-data_url = "http://storage.googleapi.com/download.tensorflow.org/models/inception5h.zip"
+data_url = "http://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip"
 
 # Directory to store the downloaded data.
 data_dir = "../inception/5h/"
