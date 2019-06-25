@@ -3,5 +3,6 @@ src/idea/vcs.xml
 src/__pycache__
 data/
 inception/
+vgg16/
 checkpoints/
 .DS_Store

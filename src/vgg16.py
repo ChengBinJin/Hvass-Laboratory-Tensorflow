@@ -98,3 +98,87 @@ class VGG16:
 
             # Open the graph-def file for binary reading.
             path = os.path.join(data_dir, path_graph_def)
+            with tf.gfile.FastGFile(path, 'rb') as file:
+                # The graph-def is a saved copy of a TensorFlow graph.
+                # First we need to create an empy graph-def.
+                graph_def = tf.GraphDef()
+
+                # Then we load the proto-buf file into the graph-def.
+                graph_def.ParseFromString(file.read())
+
+                # Finally we import the gragh-def to the default TensorFlow graph.
+                tf.import_graph_def(graph_def, name='')
+
+                # Now self.graph holds the VGG16 model from the proto-buf file.
+
+            # Get a reference to the tensor for inputting images to the graph.
+            self.input = self.graph.get_tensor_by_name(self.tensor_name_input_image)
+
+            # Get references to the tensors for the commonly used layers.
+            self.layer_tensors = [self.graph.get_tensor_by_name(name + ":0") for name in self.layer_names]
+
+    def get_layer_tensors(self, layer_ids):
+        """
+        Return a list of references to the tensors for the layers with the given id's.
+        """
+        return [self.layer_tensors[idx] for idx in layer_ids]
+
+    def get_layer_names(self, layer_ids):
+        """
+        Return a list of names for the layers with the given id's.
+        """
+        return [self.layer_names[idx] for idx in layer_ids]
+
+    def get_all_layer_names(self, startswith=None):
+        """
+        Return a list of all the layers (operations) in the graph.
+        The list can be filtered for names that start with the given string.
+        """
+
+        # Get a list of the names for ally layers (operations) in the graph.
+        names = [op.name for op in self.graph.get_operations()]
+
+        # Filter the list of names so we only get those starting with
+        # the given string.
+        if startswith is not None:
+            names = [name for name in names if name.startswith(startswith)]
+
+        return names
+
+    def create_feed_dict(self, image):
+        """
+        Create and return a feed-dict with an image.
+
+        :param image:
+            The input image is a 3-dim array which is already decoded.
+            The pixels MUST be values between 0 and 255 (float or int).
+
+        :return:
+            Dict for feeding to the graph in TensorFlow.
+        """
+
+        # Expand 3-dim array to 4-dim by prepending an 'empty' dimension.
+        # This is because we are only feeding a single image, but the
+        # VGG16 model was built to take multiple iamges as input.
+        image = np.expand_dims(image, axis=0)
+
+        flag = True
+        if flag:
+            # In the original code using this VGG16 model, the random values
+            # for the dropout are fixed to 1.0.
+            # Experiments suggest that it does not seem to matter for
+            # Style Transfer, and this causes and error with a GPU.
+            dropout_fix = 1.0
+
+            # Create feed-dict for inputting data to TensorFlow.
+            feed_dict = {
+                self.tensor_name_input_image: image,
+                self.tensor_name_dropout: [[dropout_fix]],
+                self.tensor_name_dropout1: [[dropout_fix]]
+            }
+        else:
+            # Create feed-dict for inputting data to TensorFlow.
+            feed_dict = {self.tensor_name_input_image: image}
+
+        return feed_dict
+
