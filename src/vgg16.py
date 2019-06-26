@@ -162,7 +162,7 @@ class VGG16:
         # VGG16 model was built to take multiple iamges as input.
         image = np.expand_dims(image, axis=0)
 
-        flag = True
+        flag = False
         if flag:
             # In the original code using this VGG16 model, the random values
             # for the dropout are fixed to 1.0.
