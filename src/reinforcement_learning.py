@@ -359,4 +359,246 @@ class LogQValues(Log):
                     msg=msg)
 
     def read(self):
+        """
+        Read the log-file into memory so it can be plotted.
+
+        It sets self.count_episodes, self.count_states, self.min / mean / max / std.
+        """
+
+        # Read the log-file using the super-class.
+        self._read()
+
+        # Get the logged statistics for the Q-values.
+        self.min = self.data[0]
+        self.mean = self.data[1]
+        self.max = self.data[2]
+        self.std = self.data[3]
+
+#######################################################################################
+
+
+def print_progress(msg):
+    """
+    Print progress on a single line and overwrite the line.
+    Used during optimization.
+    """
+
+    sys.stdout.write("\r" + msg)
+    sys.stdout.flush()
+
+#######################################################################################
+# A state is basically just a multi-dimensional array that is being
+# input to the Neural Network. The state consists of pre-processed images
+# from the game-environment. We will just convert the game-images to
+# gray-scale and resize them to roughly half their size. This is mainly
+# so we can save memory-space in the Replay memory further below.
+# The oroginal DeepMind paper used game-states consisting of 4 frames of
+# game-images that were gray-scaled, resized to 110 x 84 pixels, and then
+# cropped to 84 x 84 pixels because their implementation only supported this.
+
+# Height of each image-frame in the state.
+state_height= 105
+
+# Width of each image-frame in the state.
+state_width = 80
+
+# Size of each image in the state.
+state_img_size = np.array([state_height, state_width])
+
+# Number of images in the state.
+state_channels = 2
+
+# Shape of the state-array
+state_shape = [state_height, state_width, state_channels]
+
+#######################################################################################
+# Functions and classes for processing images from the game-environment
+# and converting them into a state.
+
+
+def _rgb_to_grayscale(image):
+    """
+    Convert an RGB-image into gray-scale using a formula from Wikipedia:
+    https://en.wikipedia.org/wiki/Grayscale
+    """
+
+    # Get the separate colour-channels.
+    r, g, b = image[:, :, 0], image[:, :, 1], image[:, :, 2]
+
+    # Convert to gray-scale using the Wikipedia formula.
+    img_gray = 0.2990 * r + 0.5870 * g + 0.1140 * b
+
+    return img_gray
+
+
+def _pre_process_image(image):
+    # Pre-process a raw image from the game-environment.
+
+    # Convert image to gray-scale.
+    img = _rgb_to_grayscale(image)
+
+    # Resize to the desired size using SciPy for convenience.
+    img = scipy.misc.imresize(img, size=state_img_size, interp='bicubic')
+
+    return img
+
+
+class MotionTracer:
+    """
+    Used for processing raw image-frames from the game-environment.
+
+    The image-frames are converted to gray-scale, resized, and then
+    the background is removed using filtering of the image-frames
+    so as to detect motions.
+
+    This is needed because a single image-frame of the game environment
+    is insufficient to determine the direction of moving objects.
+
+    The original DeepMind implementation used the last 4 image-frames
+    of the game-environment to allow the Neural network to learn how
+    to detect motion. This implementation could make it a little easier
+    for the Neural Network to learn how to detect motion, but it has
+    only been tested on Breakout and Space Invaders, and may not work
+    for games with more complicated graphics such as Doom. This remains
+    to be tested.
+    """
+
+    def __init__(self, image, decay=0.75):
+        """
+
+        :param image:
+            First image from the game-environment,
+            used for resetting the motion detector.
+
+        :param decay:
+            Parameter for how long the tail should be on the motion-trace.
+            This is a float between 0.0 and 1.0 where higher values means
+            the trace / tail is longer.
+        """
+
+        # Pre-process the iamge and save it for later use.
+        # The input iamge may be 8-bit integers but internally
+        # we nned to use floating-point to avoid image-noise
+        # caused by recurrent rounding-errors.
+        img = _pre_process_image(image=image)
+        self.last_input = img.astype(np.float)
+
+        # Set the last output to zero.
+        self.last_output = np.zeros_like(img)
+
+        self.decay = decay
+
+    def process(self, image):
+        # Process a raw image-frame from the game-environment.
+
+        # Pre-process the image so it is gray-scale and resized.
+        img = _pre_process_image(image=image)
+
+        # Subtract the previous input. This only leaves the
+        # pixels that have changed in the two image-frames.
+        img_dif = img - self.last_input
+
+        # Copy the contents of the input-image to the last input.
+        self.last_input[:] = img[:]
+
+        # If the pixel-difference is greater than a threshold then
+        # set the output pixel-value to the highest value (white),
+        # otherwise set the output pixel-value to the lowest value (black).
+        # So that we merely detect motion, and don't care about details.
+        img_motion = np.where(np.abs(img_dif) > 20, 255.0, 0.0)
+
+        # Add some of the previous output. This recurrent formula
+        # is what gives the trace / tail.
+        output = img_motion + self.decay * self.last_output
+
+        # Ensure the pixel-values are within the allowed bounds.
+        output = np.clip(output, 0.0, 255.0)
+
+        # Set the last output.
+        self.last_output = output
+
+        return output
+
+    def get_state(self):
+        """
+        Get a state that can be used as input to the Neural Network.
+
+        It is basically just the last input and the last output of the
+        motion-tracer. This means it is the last image-frame of the
+        game-environment, as well as the motion-trace. This shows
+        the current location of all the objects in the game-environment
+        as well as trajectories / traces of where they have been.
+        """
+
+        # Stack the last input and output iamges.
+        state = np.dstack([self.last_input, self.last_output])
+
+        # Convert to 8-bit integer.
+        # This is done to save space in the replay-memory.
+        state = state.astype(np.uint8)
+
+        return state
+
+#######################################################################################
+
+
+class ReplayMemory:
+    """
+    The replay-memory holds many previous states of the game-environment.
+    This helps stabilize training of the Neural network because the data
+    is more diverse when sampled over thousands of different states.
+    """
+
+    def __init__(self, size, num_actions, discount_factor=0.97):
+        """
+
+        :param size:
+            Capacity of the replay-memory. This is the number of states.
+
+        :param num_actions:
+            Number of possible actions in the game-environment.
+
+        :param discount_factor:
+            Discount-factor used for updating Q-values.
+        """
+
+        # Array for the previous states of the game-environment.
+        self.states = np.zeros(shape=[size] + state_shape, dtype=np.uint8)
+
+        # Array for the Q-values corresponding to the states.
+        self.q_values = np.zeros(shape=[size, num_actions], dtype=np.float)
+
+        # Array for the Q-values before being updated.
+        # This is used to compare the Q-values before and after the update.
+        self.q_values_old = np.zeros(shape=[size, num_actions], dtype=np.float)
+
+        # Actions taken for each of the states in the memory.
+        self.actions = np.zeros(shape=size, dtype=np.int)
+
+        # Reward observed for each of the states in the memory.
+        self.rewards = np.zeros(shape=size, dtype=np.float)
+
+        # Whether the life had ended in each state of the game-environment.
+        self.end_life = np.zeros(shape=size, dtype=np.bool)
+
+        # Whether the episode had ended (aka, game over) in each state.
+        self.end_episode = np.zeros(shape=size, dtype=np.bool)
+
+        # #stimation errors for the Q-values. This is used to balance
+        # the sampling of batches for training the Neural Network,
+        # so we get a balanced combination of states with high and low
+        # estimation errors for their Q-values.
+        self.estimation_erros = np.zeros(shape=size, dtype=np.float)
+
+        # Capacity of the replay-memory as the number of states.
+        self.size = size
+
+        # Discount-factor for calculating Q-values.
+        self.discount_factor = discount_factor
+
+        # Reset the number of used states in the replay-memory.
+        self.num_used = 0
+
+        # Threshold for splitting between low and high estimation errors.
+        self.error_threshold = 0.1
 
