@@ -588,7 +588,7 @@ class ReplayMemory:
         # the sampling of batches for training the Neural Network,
         # so we get a balanced combination of states with high and low
         # estimation errors for their Q-values.
-        self.estimation_erros = np.zeros(shape=size, dtype=np.float)
+        self.estimation_errors = np.zeros(shape=size, dtype=np.float)
 
         # Capacity of the replay-memory as the number of states.
         self.size = size
@@ -601,4 +601,257 @@ class ReplayMemory:
 
         # Threshold for splitting between low and high estimation errors.
         self.error_threshold = 0.1
+
+    def is_full(self):
+        # Return boolean whether the replay-memory is full.
+        return self.num_used == self.size
+
+    def used_fraction(self):
+        # Return the fraction of the replay-memory that is used.
+        return self.num_used / self.size
+
+    def reset(self):
+        # Reset the replay-memory so it is empty.
+        self.num_used = 0
+
+    def add(self, state, q_values, action, reward, end_life, end_episode):
+        """
+        Add an observed state from the game-environment, along with the
+        estimated Q-values, action taken, observed reward, etc.
+
+        :param state:
+            Current state of the game-environment.
+            This is the output of the MotionTracer-class.
+
+        :param q_values:
+            The estimated Q-values for the state.
+
+        :param action:
+            The action taken by the agent in this state of the game.
+
+        :param reward:
+            The reward that was observed from taking this action
+            and moving to the next state.
+
+        :param end_life:
+            Boolean whether the agent has lost a life in this state.
+
+        :param end_episode:
+            Boolean whether the agent has lost all lives aka. game over
+            aks. end of episode.
+        """
+
+        if not self.is_full():
+            # Index into the arrays for convenience.
+            k = self.num_used
+
+            # Increase the number of used elemetns in the replay-memory.
+            self.num_used += 1
+
+            # Store all the values in the replay-memory.
+            self.states[k] = state
+            self.q_values[k] = q_values
+            self.actions[k] = action
+            self.end_life[k] = end_life
+            self.end_episode[k] = end_episode
+
+            # Note that the reward is limited. This is done to stabilize
+            # the trainign of the Neural Network.
+            self.rewards[k] = np.clip(reward, -1.0, 1.0)
+
+    def update_all_q_values(self):
+        """
+        Update all Q-values in the replay-memory.
+
+        When states and Q-values are added to the replay-memory, the
+        Q-values have been estimated by the Neural Network. But we now
+        have more data available that we can use to improve the estimated
+        Q-values, because we not know which actions were taken and the
+        observed rewards. We sweep backwards through the entire replay-memory
+        to use the observed data to improve the estimated Q-values.
+        """
+
+        # Copy old Q-values so we can print their statiscs later.
+        # Note that the contents of the arrays are copied.
+        self.q_values_old[:] = self.q_values[:]
+
+        # Process the replay-memory backwards and update the Q-values.
+        # This looop could be implemented entirely in Numpy for higher speed,
+        # but it is probably only a small fraction of the overall time usage,
+        # and it is much easier to understand when implemented like this.
+        for k in reversed(range(self.num_used-1)):
+            # Get the data for the k'th state in the replay-memory.
+            action = self.actions[k]
+            reward = self.rewards[k]
+            end_life = self.end_life[k]
+            end_episode = self.end_episode[k]
+
+            # Calculate the Q-value for the action that was taken in this state.
+            if end_life or end_episode:
+                # If the agent lost a life or it was game over / end of episode,
+                # then the value of taking the given action is just the reward
+                # that was observed in this single step. This is because the
+                # Q-value is defined as the discounted value of all future game
+                # steps in a single life of the agent. When the life has ended,
+                # there will be no future steps.
+                action_value = reward
+            else:
+                # Otherwise the value of taking the action is the reward that
+                # we have observed plus the discounted value of future rewards
+                # from continuing the game. We use the estimated Q-values for
+                # the following state and take the maximum, because we will
+                # generally take the action that has the highest Q-value.
+                action_value = reward + self.discount_factor * np.max(self.q_values[k + 1])
+
+            # Error of the Q-value that was estimated using the Neural Network.
+            self.estimation_errors[k] = abs(action_value - self.q_values[k, action])
+
+            # Update the Q-value wit hthe better estimate.
+            self.q_values[k, action] = action_value
+
+        self.print_statistics()
+
+    def prepare_sampling_prob(self, batch_size=128):
+        """
+        Prepare the probability distribution for random sampling of stats
+        and Q-values for use in training of the Neural Network.
+
+        The probability distribution is just a simple binary split of the
+        replay-memory based on the estimation errors of the Q-values.
+        The idea is to create a batch of samples that are balanced somewhat
+        evenly between Q-values that the Neural Network already knows how to
+        estimate quiite well because they have low estimation errors, and
+        Q-values that are poorly estimated by the Neural network because
+        they have high estiamtinon errors.
+
+        The reason for this balancing of Q-values with high and low estimation
+        errors, is that if we train the Neural network mostly on data with
+        high estimation errors, then it will tend to forget what it already
+        knows and hence become over-fit so the training becomes unstable.
+        """
+
+        # Get the errors between the Q-values that were estimated using
+        # the Neural Network, and the Q-values that were updated with the
+        # reward that was actually observed when an action was taken.
+        err = self.estimation_errors[0:self.num_used]
+
+        # Create an index of the estimation errors that are low.
+        idx = err < self.error_threshold
+        self.idx_err_lo = np.squeeze(np.where(idx))
+
+        # Create an index of the estimation errors that are high.
+        self.idx_err_hi = np.squeeze(np.where(np.logical_not(idx)))
+
+        # Probability of sampling Q-values with high estiamtion errors.
+        # This is either set to the fraction of the replay-memory that
+        # has high estimation errors - or it is set to 0.5. So at least
+        # half of the batch has high estimation errors.
+        prob_err_hi = len(self.idx_err_hi) / self.num_used
+        prob_err_hi = max(prob_err_hi, 0.5)
+
+        # Number of samples in a batch that have high estimation errors.
+        self.num_samples_err_hi = int(prob_err_hi * batch_size)
+
+        # Number of samples in a batch that have low estimation errors.
+        self.num_samples_err_lo = batch_size - self.num_samples_err_hi
+
+    def random_batch(self):
+        """
+        Get a random batch of states and Q-values from the replay-memory.
+        You must call prepare_sampling_prob() before calling this function,
+        which also sets the batch-size.
+
+        The batch has been balanced so it contains states and Q-values
+        that have both high and low estimation errors for the Q-values.
+        This is done to both speed up and stabilize training of the
+        Neural Network.
+        """
+
+        # Random index of states and Q-values in the replay-memory.
+        # These have LOW estimation errors for the Q-values.
+        idx_lo = np.random.choice(self.idx_err_lo,
+                                  size=self.num_samples_err_lo,
+                                  replace=False)
+
+        # Random index of states and Q-values in the replay-memory.
+        # These have HIGH estimation errors for the Q-values.
+        idx_hi = np.random.choice(self.idx_err_hi,
+                                  size=self.num_samples_err_hi,
+                                  replace=False)
+
+        # Combine the indices.
+        idx = np.concatenate((idx_lo, idx_hi))
+
+        # Get the batches of states and Q-values.
+        states_batch = self.states[idx]
+        q_values_batch = self.q_values[idx]
+
+        return states_batch, q_values_batch
+
+    def all_batches(self, batch_size=128):
+        """
+        Iterator for all states and Q-values in the replay-memory.
+        It returns the indices for the beginning and end, as well as
+        a progress-counter between 0.0 and 1.0.
+
+        This function is not currently being used except by the function
+        estimate_all_q_values() below. These two functions are merely
+        included to make it easier for you to experiment with the code
+        by showing you an easy and efficient way to loop over all the
+        data in the replay-memory.
+        """
+
+        # Start index for the current batch.
+        begin = 0
+
+        # Repeat untill all batches have been processed.
+        while begin < self.num_used:
+            # End index for the current batch.
+            end = begin + batch_size
+
+            # Ensure the batch does not exceed the used replay-memory.
+            if end > self.num_used:
+                end = self.num_used
+
+            # Progress counter.
+            progress = end / self.num_used
+
+            # Yield the batch indices and completion-counter.
+            yield begin, end, progress
+
+            # Set the start-index for the next batch to the end of this batch.
+            begin = end
+
+    def estimate_all_q_values(self, model):
+        """
+        Estimate all Q-values for the states in the replay-memory
+        using the model / Neural Network.
+
+        Note that this function is not currently being used. It is provided
+        to make it easier for you to experiment with this code, by showing
+        you an efficient way to iterate over all the states and Q-values.
+
+        :param model:
+            Instance of the NeuralNetwork-class.
+        """
+
+        print("Re-calculating all Q-values in replay memory ...")
+
+        # Process the entire replay-memory in batches.
+        for begin, end, progress in self.all_batches():
+            # Print progress.
+            msg = "\tProgress: {0:.0%}"
+            msg = msg.format(progress)
+            print_progress(msg)
+
+            # Get the states for the current batch.
+            states = self.states[begin:end]
+
+            # Calculate the Q-values using the Neural Network
+            # and update the replay-memory.
+            self.q_values[begin:end] = model.get_q_values(states=states)
+
+        # Newline.
+        print()
+
 
