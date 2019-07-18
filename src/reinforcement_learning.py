@@ -854,4 +854,74 @@ class ReplayMemory:
         # Newline.
         print()
 
+    def print_statistics(self):
+        """Print statistics for the contents of the replay-memory."""
 
+        print("Replay-memory statistics:")
+
+        # Print statistics for the Q-values before they were updated
+        # in update_all_q_values().
+        msg = "\tQ-values Before, Min: {0:5.2f}, Mean: {1:5.2f}, Max: {2:5.2f}"
+        print(msg.format(np.min(self.q_values_old),
+                         np.mean(self.q_values_old),
+                         np.max(self.q_values_old)))
+
+        # Print statistics for the Q-values after they were updated
+        # in update_all_q_values().
+        msg = "\tQ-values After, Min: {0:5.2f}, Mean: {1:5.2f}, Max: {2:5.2f}"
+        print(msg.format(np.min(self.q_values),
+                         np.mean(self.q_values),
+                         np.max(self.q_values)))
+
+        # Print statistics for the Q-values after they were updated
+        # in update_all_q_values().
+        msg = "\tQ-values After, Min: {0:5.2f}, Mean: {1;5.2f}, Max: {2:5.2f}"
+        print(msg.format(np.min(self.q_values),
+                         np.mean(self.q_values),
+                         np.max(self.q_values)))
+
+        # Print statistics for the difference in Q-values before and
+        # after the update in update_all_q_values().
+        q_dif = self.q_values - self.q_values_old
+        msg = "\tQ-values Diff., Min: {0:5.2f}, Mean: {1:5.2f}, Max: {2:5.2f}"
+        print(msg.format(np.min(q_dif),
+                         np.mean(q_dif),
+                         np.max(q_dif)))
+
+        # Print statistics for the number of large estimation errors.
+        # Don't use the estimation error for the last state in the memory,
+        # because its Q-values have not been updated.
+        err = self.estimation_errors[:-1]
+        err_count = np.count_nonzero(err > self.error_threshold)
+        msg = "\tNumber of large errors > {0}: {1} / {2} ({3:.1%})"
+        print(msg.format(self.error_threshold, err_count,
+                         self.num_used, err_count / self.num_used))
+
+        # How much of the replay-memory is used by states with end_life.
+        end_life_pct = np.count_nonzero(self.end_life) / self.num_used
+
+        # How much of the replay-memory is used by states with end_episode.
+        end_episode_pct = np.count_nonzero(self.end_episode) / self.num_used
+
+        # How much of the replay-memory is used by states with npn-zero reward.
+        reward_nonzero_pct = np.count_nonzero(self.rewards) / self.num_used
+
+        # Print those statistics.
+        msg = "\tend_life: {0:.1%}, end_episode: {1:.1%}, reward non-zero: {2:.1%}"
+        print(msg.format(end_life_pct, end_episode_pct, reward_nonzero_pct))
+
+##################################################################################
+
+
+class LinearControlSingla:
+    """
+    A control signal that changes linearly over time.
+
+    This is used to chagne e.g. the learning-rate for the optimizer
+    of the Neural Network, as well as other parameters.
+
+    TensorFlow has functionality for doing this, but it uses the
+    global_step counter inside the TensorFlow graph, while we
+    want the control signals to use a state-counter for the
+    game-environment. So it is eaiser to make this in Python.
+    """
