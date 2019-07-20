@@ -1098,4 +1098,103 @@ class NeuralNetwork:
         # Placeholder variable for inputting the learning-rate to the optimizer.
         self.learning_rate = tf.placeholder(dtype=tf.float32, shape=[])
 
-        
+        # Placeholder variable for inputting the targer Q-values
+        # that we want the Neural Network to be able to estimate.
+        self.q_values_new = tf.placeholder(tf.float32,
+                                           shape=[None, num_actions],
+                                           name='q_values_new')
+
+        # This is a hack that allows us to save/load the counter for
+        # the number of states processed in the game-environment.
+        # We will keep it as a variable in the TensorFlow-graph
+        # even though it will not actually be used by TensorFlow.
+        self.count_states = tf.Variable(initial_value=0,
+                                        trainable=False, dtype=tf.int64,
+                                        name='count_states')
+
+        # Similarly, this is the counter for the number of episodes.
+        self.count_episodes = tf.Variable(initial_value=0,
+                                          trainable=False, dtype=tf.int64,
+                                          name='count_episodes')
+
+        # TensorFlow operation for increasing count_states.
+        self.count_states_increase = tf.assign(self.count_states,
+                                               self.count_states + 1)
+
+        # TensorFlow operation for increasing count_episodes
+        self.count_episodes_increase = tf.assign(self.count_episodes,
+                                                 self.count_episodes + 1)
+
+        # The Neural Network will be constructed in the following.
+        # Note taht the architecture of this Neural Network is very
+        # different from that used in the original DeepMind papers,
+        # which was something like this:
+        # Input image:      84 x 84 x 4 (4 gray-scale images of 84 x 84 pixels).
+        # Conv layer 1:     16 filters 8 x 8, stride 4, relu.
+        # Conv layer 2:     32 filters 4 x 4, stride 2, relu.
+        # Fully-conn. 1:    256 units, relu. (Sometimes 512 units).
+        # Fully-conn. 2:    num-action units, linear.
+
+        # The DeepMind architecture does a very aggressive downsampling of
+        # the input images so they are about 10 x 10 pixels after the final
+        # convolutional layer. I found that this resulted in significantly
+        # distorted Q-values when using the training method further below.
+        # The reason DeepMind could get it working was perfhasp that they
+        # used a very large replay memory (5x as big as here), and a single
+        # optimization iteration was performed after each step of the game,
+        # and some more tricks.
+
+        # Initializer gor the layers in the Neural Network.
+        # If you change the architecture of the network, particularly
+        # i you add or remove layers, then you may have to change
+        # the stddev-parameter here. The initial weights must result
+        # in the Neural network outputting Q-values that are very close
+        # to zero - but the network weights must not be too low either
+        # because it will make it hard to train the network.
+        # You can experiment with values between 1e-2 and 1e-3.
+        init = tf.truncated_normal_initializer(mean=0.0, stddev=2e-2)
+
+        # This builds the Neural Network using the tf.layers API
+        # which is very verbose and inelegant, but should work for everyone.
+
+        # Padding used for the convolutional layers.
+        padding = 'SAME'
+
+        # Activation function for all convolutional and fully-connected
+        # layers, except the alst.
+        activation = tf.nn.relu
+
+        # Reference to the lastly added layer of the Nerual Network.
+        # This makes it easy to add or remove layers.
+        net = self.x
+
+        # First convolutonal layer.
+        net = tf.layers.conv2d(inputs=net, name='layer_conv1',
+                               filters=16, kernel_size=3, strides=2,
+                               padding=padding, kernel_initializer=init, activation=activation)
+
+        # Second convolutional layer.
+        net = tf.layers.conv2d(inputs=net, name='layer_conv2',
+                               filters=32, kernel_size=3, strides=2,
+                               padding=padding,
+                               kernel_initializer=init, activation=activation)
+
+        # Third convolutional layer
+        net = tf.layers.conv2d(inputs=net, name='layer_conv3',
+                               filters=64, kernel_size=3, strides=1,
+                               padding=padding,
+                               kernel_initializer=init, activation=activation)
+
+        # Flatten output of the last convolutional layer so it can
+        # be input to a fully-connected (aka. dense) layer.
+        # TODO: For some bizarre reason, this function is not yet in tf.layers. (Solved)
+        # TODO: net = tf.layers.flatten(net) (Solved)
+        net = tf.contrib.layers.flatten(net)
+
+        # First fully-connected (aka, dense) layer.
+        net = tf.layers.dense(inputs=net, name='layer_fc1', uints=1024,
+                              kernel_initializer=init, activation=activation)
+
+        # Second fully-connected layer.
+        net = tf.layers.dense(inputs=net, name='layer_fc2', units=1024,
+                              kernel_initializer=init, activation=activation)
