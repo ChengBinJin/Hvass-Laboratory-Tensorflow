@@ -1198,3 +1198,110 @@ class NeuralNetwork:
         # Second fully-connected layer.
         net = tf.layers.dense(inputs=net, name='layer_fc2', units=1024,
                               kernel_initializer=init, activation=activation)
+
+        # Third fully-connected layer.
+        net = tf.layers.dense(inputs=net, name='layer_fc3', units=1024,
+                              kernel_initializer=init, activation=activation)
+
+        # Fourth fully-connected layer.
+        net = tf.layers.dense(inputs=net, name='layer_fc4', units=1024,
+                              kernel_initializer=init, activation=activation)
+
+        # Final fully-connected layer.
+        net = tf.layers.dense(inputs=net, name='layer_fc_out', units=num_actions,
+                              kernel_initializer=init, activation=None)
+
+        # The output of the Neural Network is the estimated Q-values
+        # for each possible action in the game-environment.
+        self.q_values = net
+
+        # TensorFlow has a built-int loss-function for doing regression:
+        # self.loss = tf.nn.l2_loss(self.q_values - self.q_values_new)
+        # But it uses tf.reduce_sum() rather than tf.reduce_mean()
+        # which is used by PrettyTensor. This means the scale of the
+        # gradient is different and hence the hyper-parameters
+        # would have to be re-tuned, because they were tuned for
+        # the original version of this tutorial using PrettyTensor.
+        # So instead we calculate the L2-loss similarly to how it is
+        # done in PrettyTensor.
+        squared_error = tf.square(self.q_values - self.q_values_new)
+        sum_squared_error = tf.reduce_sum(squared_error, axis=1)
+        self.loss = tf.reduce_mean(sum_squared_error)
+
+        # Optimizer used for minimizing the loss-function.
+        # Note the learning-rate is a placeholder variable so we can
+        # lower the learning-rate as optimization progresses.
+        self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
+
+        # Used for saving and loading checkpoints
+        self.saver = tf.train.Saver()
+
+        # Create a new TensorFlow session so we can run the Neural network.
+        self.session = tf.Session()
+
+        # Load the most recent checkpoint if it exists,
+        # otherwise initialize all the variables in teh TensorFlow graph.
+        self.load_checkpoint()
+
+    def close(self):
+        """Close the TensorFlow session."""
+        self.session.close()
+
+    def load_checkpoint(self):
+        """
+        Load all variables of the TensorFlow graph from a checkpoint.
+        If the checkpoint does not exist, then initialize all variables.
+        """
+
+        try:
+            print("Trying to restore last checkpoint ...")
+
+            # Use TensorFlow to find the latest checkpoint - if any.
+            last_chk_path = tf.train.latest_checkpoint(checkpoint_dir=checkpoint_dir)
+
+            # Try and load the data in the checkpiont.
+            self.saver.restore(self.session, save_path=last_chk_path)
+
+            # If we get to this point, the checkpoint was successfully loaded.
+            print("Restored checkpoint from:", last_chk_path)
+        except:
+            # If the above failed for some reason, simply
+            # Initialize all the variables for the TensorFlow graph.
+            print("Failed to restore checkpont from:", checkpoint_dir)
+            print("Initializing variables instead.")
+            self.session.run(tf.global_variables_initializer())
+
+    def save_checkponit(self, current_iteration):
+        """Save all variables of the TensorFlow graph to a checkpoint."""
+
+        self.saver.save(self.session,
+                        save_path=self.checkpoint_path,
+                        global_step=current_iteration)
+
+        print("Saved checkpoint.")
+
+    def get_q_values(self, states):
+        """
+        Calculate and return the estimated Q-values fro the given states.
+
+        A single state contains two images (or channels): The most recent
+        image-frame from the game-environment, and a motion-tracking image.
+        See the MotionTracer-class for details.
+
+        The input to this function is an array of such states which allows
+        for batch-processing of the states. So the input is a 4-dim
+        array with shape: [batch, height, width, state_channels].
+
+        The output of this function is an array of Q-value-arrays.
+        There is a Q-value for each possible action in the game-environment.
+        So the output is a 2-dim array with shape: [batch, num_actions]
+        """
+
+        # Create a feed-dict for inputting the states to the Neural Network.
+        feed_dict = {self.x: states}
+
+        # Use TensorFlow to calculate teh estimated Q-values for these states.
+        values = self.session.run(self.q_values, feed_dict=feed_dict)
+
+        return values
+
