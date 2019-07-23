@@ -1171,7 +1171,8 @@ class NeuralNetwork:
         # First convolutonal layer.
         net = tf.layers.conv2d(inputs=net, name='layer_conv1',
                                filters=16, kernel_size=3, strides=2,
-                               padding=padding, kernel_initializer=init, activation=activation)
+                               padding=padding,
+                               kernel_initializer=init, activation=activation)
 
         # Second convolutional layer.
         net = tf.layers.conv2d(inputs=net, name='layer_conv2',
@@ -1304,4 +1305,250 @@ class NeuralNetwork:
         values = self.session.run(self.q_values, feed_dict=feed_dict)
 
         return values
+
+    def optimize(self, min_epochs=1.0, max_epochs=10,
+                 batch_size=128, loss_limit=0.015,
+                 learning_rate=1e-3):
+        """
+        Optimize the Neural Network by sampling states and Q-values
+        from the replay-memory.
+
+        The original DeepMind paper performed one optimization iteration
+        after processing each new state of the game-environment. This is
+        an un-natural way of doing optimization of Neural Networks.
+
+        So instead we perform a full optimization run every time the
+        Replay Memory is full (or it is filled to the desired fraction).
+        This also gives more efficient use of a GPU for the optimization.
+
+        The problem is that this may over-fit the Neural Network to whatever
+        is in the replay-memory. So we use several tricks to try and adapt
+        the number of optimization iterations.
+
+        :param min_epochs:
+            Minimum number of optimization epochs. One epoch corresponds
+            to the replay-memory being used once. However, as the batches
+            are sampled randomly and biased somewhat, we may not use the
+            whole replay-memory. This number is just a convenient measure.
+
+        :param max_epochs:
+            Maximum number of optimization epochs.
+
+        :param batch_size:
+            Size of each random batch sampled from the replay-memory.
+
+        :param loss_limit:
+            Optimization continues until the average loss-value of the
+            last 100 batches is below this value (or max_epochs is reached).
+
+        :param learning_rate:
+            Learning-rate to use for the optimizer.
+        """
+
+        print("Optimizing Neural Network to better estimate Q-values ...")
+        print("\tLearning-rate: {0:.1e}".format(learning_rate))
+        print("\tLoss-limit: {0:.3f}".format(loss_limit))
+        print("\tMax epochs: {0:.1f}".format(max_epochs))
+
+        # Prepare the probability distribution for sampling the replay-memory.
+        self.replay_memory.prepare_sampling_prob(batch_size=batch_size)
+
+        # Number of optimization iterations corresponding to one epoch.
+        iterations_per_epoch = self.replay_memory.num_used / batch_size
+
+        # Minimum number of iterations to perform.
+        min_iterations = int(iterations_per_epoch * min_epochs)
+
+        # Maximum num of iterations to perform.
+        max_iterations = int(iterations_per_epoch * max_epochs)
+
+        # Buffer for storing the loss-values of the most recent batches.
+        loss_history = np.zeros(100, dtype=float)
+
+        for i in range(max_iterations):
+            # Randomly sample a batch of states and target Q-values
+            # from the replay-memory. These are the Q-values that we
+            # want the Neural Network to be able to estimate.
+            state_batch, q_values_batch = self.replay_memory.random_batch()
+
+            # Create a feed-dict for inputting the data to the TensorFlow graph.
+            # Note that the learning-rate is also in this feed-dict.
+            feed_dict = {self.x: state_batch,
+                         self.q_values_new: q_values_batch,
+                         self.learning_rate: learning_rate}
+
+            # Perform one optimization step and get the loss-value.
+            loss_val, _ = self.session.run([self.loss, self.optimizer],
+                                           feed_dict=feed_dict)
+
+            # Shift the loss-history and assign the new value.
+            # This causes the loss-history to only hold the most recent values.
+            loss_history = np.roll(loss_history, 1)
+            loss_history[0] = loss_val
+
+            # Calculate the average loss for the previous batches.
+            loss_mean = np.mean(loss_history)
+
+            # Print status.
+            pct_epoch = i / iterations_per_epoch
+            msg = "\tIteration: {0} ({1:.2f} epoch), Batch loss: {2:.4f}, Mean loss: {3:.4f}"
+            msg = msg.format(i, pct_epoch, loss_val, loss_mean)
+            print_progress(msg)
+
+            # Stop the optimization if we have performed the required number
+            # of iterations and the loss-value is ufficiently low.
+            if i > min_iterations and loss_mean < loss_limit:
+                break
+
+        # Print newline.
+        print()
+
+    def get_weights_variable(self, layer_name):
+        """
+        Return the variable inside the TensorFlow graph for the weights
+        in the layer with the given name.
+
+        Note that the actual values of the variables are not returned,
+        you must use the function get_variable_value() for that.
+        """
+
+        # The tf.layers API uses this name for the weigths in a conv-layer.
+        variable_name = 'kernel'
+
+        with tf.compat.v1.variable_scope(layer_name, reuse=True):
+            variable = tf.compat.v1.get_variable(variable_name)
+
+        return variable
+
+    def get_variable_value(self, variable):
+        """Return the value of a variable inside the TensorFlow graph."""
+
+        weights = self.session.run(variable)
+
+        return weights
+
+    def get_layer_tensor(self, layer_name):
+        """
+        Return the tensor for the output of a layer.
+        Note that this does not return the actual values,
+        but instead returns a reference to the tensor
+        inside the TensorFlow graph. Use get_tensor_value()
+        to get the actual contents of the tensor.
+        """
+
+        # The name of the last operation of a layer,
+        # assuming it uses Relu as the activation-function.
+        tensor_name = layer_name + "/Relu:0"
+
+        # Get the tensor with this name.
+        tensor = tf.get_default_graph().get_tensor_by_name(tensor_name)
+
+        return tensor
+
+    def get_tensor_value(self, tensor, state):
+        """Get the value of a tensor in the Neural Network."""
+
+        # Create a feed-dict for inputting the state to the Neural Network.
+        feed_dict = {self.x: [state]}
+
+        # Run the TensorFlow session to calculate the value of the tensor.
+        output = self.session.run(tensor, feed_dict=feed_dict)
+
+        return output
+
+    def get_count_states(self):
+        """
+        Get the number of states taht has been processed in the game-environment.
+        This is not used by the TensorFlow graph. It is just a hack to save
+        and reload the counter along with the checkpoint-file.
+        """
+        return self.session.run(self.count_states)
+
+    def get_count_episodes(self):
+        """
+        Get the number of episodes that has been processed in the game-environment.
+        """
+        return self.session.run(self.count_episodes)
+
+    def increase_count_states(self):
+        """
+        Increase the number of states that has been processed
+        in the game-environment.
+        """
+        return self.session.run(self.count_states_increase)
+
+    def increase_count_episodes(self):
+        """
+        Increase the number of episodes that has been processed
+        in the game-environment.
+        """
+        return self.session.run(self.count_episodes_increase)
+
+##################################################################################
+
+
+class Agent:
+    """
+    This implements the function for running the game-environment with
+    an agent that uses Reinforcement Learning. this class also creates
+    instance of the Replay Memory and Neural network.
+    """
+
+    def __init__(self, env_name, training, render=False, use_logging=True):
+        """
+        Create an object-instance. This also creates a new object for the
+        Replay Memory and the Neural Network.
+
+        Replay Memory will only be allocated if training==True.
+
+        :param env_name:
+            Name of the game-environment in OpenAI Gym.
+            Examples: 'Breakout-v0' and 'SpaceInvaders-v0'
+
+        :param training:
+            Boolean whether to train the agent and Neural Network (True),
+            or test the agent by playing a number of episodes of the game (False).
+
+        :param render:
+            Boolean whether to render the game-images to screen during testing.
+
+        :param use_logging:
+            Boolean whether to use logging to text-files during training.
+        """
+
+        # Create the game-environment using OpenAI Gym.
+        self.env = gym.make(env_name)
+
+        # The number of possible actions that the agent may take in every step.
+        self.num_actions = self.env.action_space.n
+
+        # Whether we are training (True) or testing (False).
+        self.training = training
+
+        # Whether to render each image-frame of the game-environment to screen.
+        self.render = render
+
+        # Whether to use logging during training.
+        self.use_logging = use_logging
+
+        if self.use_logging and self.training:
+            # Used for logging Q-values and rewards during training.
+            self.log_q_values = LogQValues()
+            self.log_reward = LogReward()
+        else:
+            self.log_q_values = None
+            self.log_reward = None
+
+        # List of string-names for the actions in the game-environment.
+        self.action_names = self.env.unwrapped.get_action_meanings()
+
+        # Epsilon-greedy policy for selecting an action from the Q-values.
+        # During training the epsilon is decrease linearly over the given
+        # number of iterations. During testing the fixed epsilon is used.
+        self.epsilon_greedy = EpsilonGreedy(start_value=1.0,
+                                            end_value=0.1,
+                                            num_iterations=1e6,
+                                            num_actions=self.num_actions,
+                                            epsilon_testing=0.01)
+
 
