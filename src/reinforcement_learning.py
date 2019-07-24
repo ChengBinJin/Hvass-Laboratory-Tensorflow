@@ -1272,7 +1272,7 @@ class NeuralNetwork:
             print("Initializing variables instead.")
             self.session.run(tf.global_variables_initializer())
 
-    def save_checkponit(self, current_iteration):
+    def save_checkpoint(self, current_iteration):
         """Save all variables of the TensorFlow graph to a checkpoint."""
 
         self.saver.save(self.session,
@@ -1550,5 +1550,257 @@ class Agent:
                                             num_iterations=1e6,
                                             num_actions=self.num_actions,
                                             epsilon_testing=0.01)
+
+        if self.training:
+            # The following contrl-signals are only used during training.
+
+            # The learning-rate for the optimizer decreases linearly.
+            self.learning_rate_control = LinearControlSignal(start_value=1e-3,
+                                                             end_value=1e-5,
+                                                             num_iterations=5e6)
+
+            # Ths loss-limit is used to abort the optimization whenever the
+            # mean batch-loss falls below this limit.
+            self.loss_limit_control = LinearControlSignal(start_value=0.1,
+                                                          end_value=0.015,
+                                                          num_iterations=5e6)
+
+            # The maximum number of epochs to perform during optimization.
+            # This is increased from 5 to 10 epochs, because it was found for
+            # the Breakout-game that too many epochs could be harmful early
+            # in the training, as it might cause over-ftting.
+            # Later in the training we would occasionally get rare events
+            #  and would therefore have to optimize for more iterations
+            # because the learning-rate had been decreased.
+            self.max_epochs_control = LinearControlSignal(start_value=5.0,
+                                                          end_value=10.0,
+                                                          num_iterations=5e6)
+
+            # The fraction of the replay-memory to be used.
+            # Early in the training, we want to optimize more frequently
+            # so the Neural Network is trained faster and the Q-values
+            # are learned and updated more often. Later in the training,
+            # we need more samples in the replay-memory to have sufficient
+            # diversity, otherwise the Neural Network will over-fit.
+            self.replay_fraction = LinearControlSignal(start_value=0.1,
+                                                       end_value=1.0,
+                                                       num_iterations=5e6)
+        else:
+            # We set these objects to None when they will not be used.
+            self.learning_rate_control = None
+            self.loss_limit_control = None
+            self.max_epochs_control = None
+            self.replay_fraction = None
+
+        if self.training:
+            # We only create the replay-memory when we are training the agent,
+            # becuase it requires a lot of RAM. The iamge-frames from the
+            # game-environment are resized to 105 x 80 pixels gray-scale,
+            # and each state has 2 channels (one for the recent image-frame
+            # of the game-environment, and one for the motion-trace).
+            # Each pixel is 1 byte, so this replay-memory needs more than
+            # 3 GB RAM (105 x 80 x 2 x 200000 bytes).
+
+            self.replay_memory = ReplayMemory(size=200000,
+                                              num_actions=self.num_actions)
+        else:
+            self.replay_memory = None
+
+        # Create the Neural Network used for estimating Q-values.
+        self.model = NeuralNetwork(num_actions=self.num_actions,
+                                   replay_memory=self.replay_memory)
+
+        # Log of the rewards obtained in each episode during calls to run()
+        self.episdoe_rewards = []
+
+    def reset_episode_rewards(self):
+        """Reset the log of episode-rewards."""
+        self.episode_rewards = []
+
+    def get_action_name(self, action):
+        """Retur nthe name of an action."""
+        return self.action_names[action]
+
+    def get_lives(self):
+        """Get the number of lives the agent has in the game-environment."""
+        return self.env.unwrapped.ale.lives()
+
+    def run(self, num_episodes=None):
+        """
+        Ruen the game-environment and use the Neural network to decide
+        which actions to take in eah step through Q-value estimates.
+
+        :param num_episodes:
+            Number of episodes to process in the game-environment.
+            If None then continue forever. This is useful during training
+            where you might want to stop the training using Ctrl-C instead.
+        """
+
+        # This will cause a reset in the first iteration of the following loop.
+        end_episode = True
+
+        # Counter for the number of states we have processed.
+        # This is stored in the TensorFlow graph so it can be
+        # saved and reloaded along with the checkpoint.
+        count_states = self.model.get_count_states()
+
+        # Counter for the number of episodes we have processed.
+        count_episodes = self.model.get_count_episodes()
+
+        if num_episodes is None:
+            # Loop forever by comparing the episode-counter to infinity.
+            num_episodes = float('inf')
+        else:
+            # The episode-counter may not start at zero if training is
+            # continued from a checkpoint. Take this into account
+            # when determining the number of iterations to perform.
+            num_episodes += count_episodes
+
+        while count_episodes <= num_episodes:
+            if end_episode:
+                # Reset the game-environment and get the first image-frame.
+                img = self.env.reset()
+
+                # Create a new motion-tracer for processing images from the
+                # game-environment. Initialize with the first image-frame.
+                # This resets the motion-tracer so the trace starts again.
+                # This could also be done if end_lief == True.
+                motion_tracer = MotionTracer(img)
+
+                # Reset the reward fro the entire episode to zero.
+                # This is only used for printing statistics.
+                reward_episode = 0.0
+
+                # Increase the counter for the number episodes.
+                # This counter is stored inside the TensorFlow graph
+                # so it can be saved adn restored with the checkpoint.
+                count_episodes = self.model.increase_count_episodes()
+
+                # Get the number of lives that the agent has left in this episode.
+                num_lives = self.get_lives()
+
+            # Get the state of the game-environment from the motion-tracer.
+            # The state has two images: (1) The last image-frame from the game
+            # and (2) a motion-trace that shows movement trajectories.
+            state = motion_tracer.get_state()
+
+            # Use the Neural Network to estimate the Q-values for the state.
+            # Note that the function assumes an array of states and returns
+            # a 2-dim array of Q-values, buf we just have a single state here.
+            q_values = self.model.get_q_values(states=[state])[0]
+
+            # Determine the action that the agent must take in the game-environment.
+            # The epsilon is just used for printing further below.
+            action, epsilon = self.epsilon_greedy.get_action(q_values=q_values,
+                                                             iteration=count_states,
+                                                             training=self.training)
+
+            # Take a step in the game-environment using the given action.
+            # Note that in OpenAI Gym, the step-function acutally repeats the
+            # action between 2 and 4 time-steps for Atari games, with the number
+            # chosen at random.
+            img, reward, end_episode, info = self.env.step(action=action)
+
+            # Process the image from the game-environment in the motion-tracer.
+            # This will first be used in the next iteration of the loop.
+            motion_tracer.process(image=img)
+
+            # Add the reward for the step to the reward for the entire episode.
+            reward_episode += reward
+
+            # Determine if a life was lost in this step
+            num_lives_new = self.get_lives()
+            end_life = (num_lives_new < num_lives)
+            num_lieves = num_lives_new
+
+            # Increase the counter for the number of states that have been processed.
+            count_states = self.model.increase_count_states()
+
+            if not self.training and self.render:
+                # Render the game-environment to screen.
+                self.env.render()
+
+                # Insert a small pause to slow down the game,
+                # making it easier to follow for human eyes.
+                time.sleep(0.01)
+
+            # if we want to train the Neural network to better estimate Q-values.
+            if self.training:
+                # Add the state of the game-environment to the replay-memory.
+                self.replay_memory.add(state=state,
+                                       q_values=q_values,
+                                       action=action,
+                                       reward=reward,
+                                       end_life=end_life,
+                                       end_episode=end_episode)
+
+                # How much of the replay-memory should be used.
+                use_fraction = self.replay_fraction.get_value(iteration=count_states)
+
+                # When the replay-memory is sufficiently full.
+                if self.replay_memory.is_full() \
+                        or self.replay_memory.used_faraction() > use_fraction:
+
+                    # Update all Q-values in the replay-memory through a backwards-sweep.
+                    self.replay_memory.update_all_q_values()
+
+                    # Log statistics for the Q-values to file.
+                    if self.use_logging:
+                        self.log_q_values.write(count_episodes=count_episodes,
+                                                count_states=count_states,
+                                                q_values=self.replay_memory.q_values)
+
+                    # Get the control parameters for optimization of the Neural Network.
+                    # These are changes linearly depending on the state-counter.
+                    learning_rate = self.learning_rate_control.get_value(iteration=count_states)
+                    loss_limit = self.loss_limit_control.get_value(iteration=count_states)
+                    max_epochs = self.max_epochs_control.get_value(iteration=count_states)
+
+                    # Perform an optimization run on the Neural Network so as to
+                    # improve the estimates for the Q-values.
+                    # This will sample random batches from the replay-memory.
+                    self.model.optimize(learning_rate=learning_rate,
+                                        loss_limit=loss_limit,
+                                        max_epochs=max_epochs)
+
+                    # Save a checkpoint of the Neural Network so we can reload it.
+                    self.model.save_checkpoint(count_states)
+
+                    # Reset the replay-memory. This throws away all the data we have
+                    # just gathered, so we will have to fill the replay-memory again.
+                    self.replay_memory.reset()
+
+                if end_episode:
+                    # Add the episode's reward to a list for calculating statistics.
+                    self.episode_rewards.append(reward_episode)
+
+                # Mean reward of the last 30 episodes.
+                if len(self.episode_rewards) == 0:
+                    # The list of rewards is empty.
+                    reward_mean = 0.0
+                else:
+                    reward_mean = np.mean(self.episode_rewards[-30:])
+
+                if self.training and end_episode:
+                    # Log rewrad to file.
+                    if self.use_logging:
+                        self.log_reward.write(count_episodes=count_episodes,
+                                              count_states=count_states,
+                                              reward_episode=reward_episode,
+                                              reward_mena=reward_mean)
+
+                        # Print reward to screeen.
+                        msg = "{0:4}:{1}\t Epsilon: {2:4.2f}\t Reward: {3:.1f}\t Episode Mean: {4:.1f}"
+                        print(msg.format(count_episodes, count_states, epsilon,
+                                         reward_episode, reward_mean))
+                    elif not self.training and (reward != 0.0 or end_life or end_episode):
+                        # Print Q-values and reward to screen.
+                        msg = "{0:4}:{1}\tQ-min: {2:5.3f}\tQ-max: {3:5.3f}\tLives: {4}\tReward: {5:.1f}\tEpisode Mean: {6:.1f}"
+                        print(msg.format(count_episodes, count_states, np.min(q_values),
+                                         np.max(q_values), num_lives, reward_episode, reward_mean))
+
+##################################################################################
+
+
 
 
