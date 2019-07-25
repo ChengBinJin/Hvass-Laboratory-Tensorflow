@@ -1093,16 +1093,16 @@ class NeuralNetwork:
         # Placeholder variable for inputting states into the Neural Network.
         # A state is a multi-dimensional array holding image-frames from
         # the game-environment.
-        self.x = tf.placeholder(dtype=tf.float32, shape=[None] + state_shape, name='x')
+        self.x = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None] + state_shape, name='x')
 
         # Placeholder variable for inputting the learning-rate to the optimizer.
-        self.learning_rate = tf.placeholder(dtype=tf.float32, shape=[])
+        self.learning_rate = tf.compat.v1.placeholder(dtype=tf.float32, shape=[])
 
         # Placeholder variable for inputting the targer Q-values
         # that we want the Neural Network to be able to estimate.
-        self.q_values_new = tf.placeholder(tf.float32,
-                                           shape=[None, num_actions],
-                                           name='q_values_new')
+        self.q_values_new = tf.compat.v1.placeholder(tf.float32,
+                                                     shape=[None, num_actions],
+                                                     name='q_values_new')
 
         # This is a hack that allows us to save/load the counter for
         # the number of states processed in the game-environment.
@@ -1118,12 +1118,12 @@ class NeuralNetwork:
                                           name='count_episodes')
 
         # TensorFlow operation for increasing count_states.
-        self.count_states_increase = tf.assign(self.count_states,
-                                               self.count_states + 1)
+        self.count_states_increase = tf.compat.v1.assign(self.count_states,
+                                                         self.count_states + 1)
 
         # TensorFlow operation for increasing count_episodes
-        self.count_episodes_increase = tf.assign(self.count_episodes,
-                                                 self.count_episodes + 1)
+        self.count_episodes_increase = tf.compat.v1.assign(self.count_episodes,
+                                                           self.count_episodes + 1)
 
         # The Neural Network will be constructed in the following.
         # Note taht the architecture of this Neural Network is very
@@ -1193,7 +1193,7 @@ class NeuralNetwork:
         net = tf.contrib.layers.flatten(net)
 
         # First fully-connected (aka, dense) layer.
-        net = tf.layers.dense(inputs=net, name='layer_fc1', uints=1024,
+        net = tf.layers.dense(inputs=net, name='layer_fc1', units=1024,
                               kernel_initializer=init, activation=activation)
 
         # Second fully-connected layer.
@@ -1235,10 +1235,10 @@ class NeuralNetwork:
         self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
 
         # Used for saving and loading checkpoints
-        self.saver = tf.train.Saver()
+        self.saver = tf.compat.v1.train.Saver()
 
         # Create a new TensorFlow session so we can run the Neural network.
-        self.session = tf.Session()
+        self.session = tf.compat.v1.Session()
 
         # Load the most recent checkpoint if it exists,
         # otherwise initialize all the variables in teh TensorFlow graph.
@@ -1270,7 +1270,7 @@ class NeuralNetwork:
             # Initialize all the variables for the TensorFlow graph.
             print("Failed to restore checkpont from:", checkpoint_dir)
             print("Initializing variables instead.")
-            self.session.run(tf.global_variables_initializer())
+            self.session.run(tf.compat.v1.global_variables_initializer())
 
     def save_checkpoint(self, current_iteration):
         """Save all variables of the TensorFlow graph to a checkpoint."""
@@ -1611,7 +1611,7 @@ class Agent:
                                    replay_memory=self.replay_memory)
 
         # Log of the rewards obtained in each episode during calls to run()
-        self.episdoe_rewards = []
+        self.episode_rewards = []
 
     def reset_episode_rewards(self):
         """Reset the log of episode-rewards."""
@@ -1739,7 +1739,7 @@ class Agent:
 
                 # When the replay-memory is sufficiently full.
                 if self.replay_memory.is_full() \
-                        or self.replay_memory.used_faraction() > use_fraction:
+                        or self.replay_memory.used_fraction() > use_fraction:
 
                     # Update all Q-values in the replay-memory through a backwards-sweep.
                     self.replay_memory.update_all_q_values()
@@ -1770,37 +1770,90 @@ class Agent:
                     # just gathered, so we will have to fill the replay-memory again.
                     self.replay_memory.reset()
 
-                if end_episode:
-                    # Add the episode's reward to a list for calculating statistics.
-                    self.episode_rewards.append(reward_episode)
+            if end_episode:
+                # Add the episode's reward to a list for calculating statistics.
+                self.episode_rewards.append(reward_episode)
 
-                # Mean reward of the last 30 episodes.
-                if len(self.episode_rewards) == 0:
-                    # The list of rewards is empty.
-                    reward_mean = 0.0
-                else:
-                    reward_mean = np.mean(self.episode_rewards[-30:])
+            # Mean reward of the last 30 episodes.
+            if len(self.episode_rewards) == 0:
+                # The list of rewards is empty.
+                reward_mean = 0.0
+            else:
+                reward_mean = np.mean(self.episode_rewards[-30:])
 
-                if self.training and end_episode:
-                    # Log rewrad to file.
-                    if self.use_logging:
-                        self.log_reward.write(count_episodes=count_episodes,
-                                              count_states=count_states,
-                                              reward_episode=reward_episode,
-                                              reward_mena=reward_mean)
+            if self.training and end_episode:
+                # Log rewrad to file.
+                if self.use_logging:
+                    self.log_reward.write(count_episodes=count_episodes,
+                                          count_states=count_states,
+                                          reward_episode=reward_episode,
+                                          reward_mean=reward_mean)
 
-                        # Print reward to screeen.
-                        msg = "{0:4}:{1}\t Epsilon: {2:4.2f}\t Reward: {3:.1f}\t Episode Mean: {4:.1f}"
-                        print(msg.format(count_episodes, count_states, epsilon,
-                                         reward_episode, reward_mean))
-                    elif not self.training and (reward != 0.0 or end_life or end_episode):
-                        # Print Q-values and reward to screen.
-                        msg = "{0:4}:{1}\tQ-min: {2:5.3f}\tQ-max: {3:5.3f}\tLives: {4}\tReward: {5:.1f}\tEpisode Mean: {6:.1f}"
-                        print(msg.format(count_episodes, count_states, np.min(q_values),
-                                         np.max(q_values), num_lives, reward_episode, reward_mean))
+                # Print reward to screeen.
+                msg = "{0:4}:{1}\t Epsilon: {2:4.2f}\t Reward: {3:.1f}\t Episode Mean: {4:.1f}"
+                print(msg.format(count_episodes, count_states, epsilon,
+                                 reward_episode, reward_mean))
+            elif not self.training and (reward != 0.0 or end_life or end_episode):
+                # Print Q-values and reward to screen.
+                msg = "{0:4}:{1}\tQ-min: {2:5.3f}\tQ-max: {3:5.3f}\tLives: {4}\tReward: {5:.1f}\tEpisode Mean: {6:.1f}"
+                print(msg.format(count_episodes, count_states, np.min(q_values),
+                                 np.max(q_values), num_lives, reward_episode, reward_mean))
 
 ##################################################################################
 
+if __name__ == '__main__':
+    # Description of this program.
+    desc = "Reinforcement Learning (Q-learning) for Atari Games using TensorFlow."
 
+    # Create the argument parser.
+    parser = argparse.ArgumentParser(description=desc)
 
+    # Add  arguments to the parser.
+    parser.add_argument("--env", required=False, default='Breakout-v0',
+                        help="name of the game-environment in OpenAI Gym")
 
+    parser.add_argument("--training", required=False,
+                        dest='training', action='store_true',
+                        help='train the agent (otherwise test the agent)')
+
+    parser.add_argument("--render", required=False,
+                        dest="render", action="store_true",
+                        help="render game-output to screen")
+
+    parser.add_argument("--episodes", required=False, type=int, default=None,
+                        help="number of episodes to run")
+
+    parser.add_argument("--dir", required=False, default=checkpoint_base_dir,
+                        help="directory for the checkpiont and log-files")
+
+    # Parse th command-line arguments.
+    args = parser.parse_args()
+
+    # Get the arguments.
+    env_name = args.env
+    training = args.training
+    render = args.render
+    num_episodes = args.episodes
+    checkpoint_base_dir = args.dir
+
+    # Update all the file-paths after the base-dir has been set.
+    update_paths(env_name=env_name)
+
+    # Create an agent for either training or testing on the game-environment.
+    agent = Agent(env_name=env_name,
+                  training=training,
+                  render=render)
+
+    # Run the agent
+    agent.run(num_episodes=num_episodes)
+
+    # Print statistics.
+    rewards = agent.episode_rewards
+    print()  # Newline.
+    print("Rewards for {0} episodes:".format(len(rewards)))
+    print("- Min:    ", np.min(rewards))
+    print("- Mean:   ", np.mean(rewards))
+    print("- Max:    ", np.max(rewards))
+    print("- Stdev:  ", np.std(rewards))
+
+##################################################################################
