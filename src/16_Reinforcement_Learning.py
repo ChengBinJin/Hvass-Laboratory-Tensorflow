@@ -164,18 +164,83 @@ for i in range(0, 5):
     plot_state(idx=idx+i)
 
 # Example: Smallest Difference in Q-Values
+idx = np.argmin(q_values_dif)
+print("Example: Smallest Difference in Q-Values")
+print("idx: {}".format(idx))
+
+for i in range(0, 5):
+    plot_state(idx=idx+i)
 
 # Output of Convolutional Layer
+def plot_layer_output(model, layer_name, state_index, inverse_cmap=False):
+    """
+    Plot the output of aconvolutional layer.
+
+    :param model: An instance of the NeuralNetwork-class.
+    :param layer_name: Name of the convolutional layer.
+    :param state_index: Index into the replay-memory for a state taht
+                        will be input to the Neural Network.
+    :param inverse_cmap: Boolean whether to inverse the color-map.
+    """
+
+    # Get the given state-array from the replay-memory.
+    state = replay_memory.states[state_index]
+
+    # Get the output tensor for the given layer insdie the TensorFlow graph.
+    # This is not the value-contents but merely a reference to the tensor.
+    layer_tensor = model.get_layer_tensor(layer_name=layer_name)
+
+    # Get the actual value of the tensor by feeding the state-data
+    # to the TensorFlow graph and calculating the value of the tensor.
+    values = model.get_tensor_value(tensor=layer_tensor, state=state)
+
+    # Number of image channels output by the convolutional layer.
+    num_images = values.shape[3]
+
+    # Number of grid-cells to plot.
+    # Rounded-up, square-root of the number of filters.
+    num_grids = math.ceil(math.sqrt(num_images))
+
+    # Create figure with a grid of sub-plots.
+    fig, axes = plt.subplots(num_grids, num_grids, figsize=(10, 10))
+
+    print("Dim. of each image:", values.shape)
+
+    if inverse_cmap:
+        cmap = 'gray_r'
+    else:
+        cmap = 'gray'
+
+    # Plot the outputs of all the channels in the conv-layer.
+    for i, ax in enumerate(axes.flat):
+        # Only plot the valid iamge-channels.
+        if i < num_images:
+            # Get the image for the i'th output channel.
+            img = values[0, :, :, i]
+
+            # Plot image.
+            ax.imshow(img, interpolation='nearest', cmap=cmap)
+
+        # Remove ticks from the plot.
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Ensure the plot is shown correctly with multiple plots
+    # in a single Notebook cell.
+    plt.show()
 
 # Game State
-
-
+idx = np.argmax(q_values_max)
+plot_state(idx=idx, print_q=False)
 
 # Output of Convolutional Layer 1
+plot_layer_output(model=model, layer_name='layer_conv1', state_index=idx, inverse_cmap=False)
 
 # Output of Convolutional Layer 2
+plot_layer_output(model=model, layer_name='layer_conv2', state_index=idx, inverse_cmap=False)
 
 # Output of Convolutional Layer 3
+plot_layer_output(model=model, layer_name='layer_conv3', state_index=idx, inverse_cmap=False)
 
 
 
