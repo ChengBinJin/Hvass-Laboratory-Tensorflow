@@ -242,10 +242,77 @@ plot_layer_output(model=model, layer_name='layer_conv2', state_index=idx, invers
 # Output of Convolutional Layer 3
 plot_layer_output(model=model, layer_name='layer_conv3', state_index=idx, inverse_cmap=False)
 
-
-
 # Weights for Convolutional Layers
+def plot_conv_weights(model, layer_name, input_channel=0):
+    """
+    Plot the weights for a convolutional layer.
+
+    :param model: An instance of the NeuralNetwork-class.
+    :param layer_name: Name of the convolutional layer.
+    :param input_channel: Plot the weights for this input-channel.
+    """
+
+    # Get the variable for the weights of the given layer.
+    # This is a reference to the variable inside TensorFlow,
+    # not its actual value.
+    weights_variable = model.get_weights_variable(layer_name=layer_name)
+
+    # Retrieve the values of the weight-variable from TensorFlow.
+    # The format of this 4-dim tensor is determined by the
+    # TensorFlow API. See Tutorial #02 for more details.
+    w = model.get_variable_value(variable=weights_variable)
+
+    # Get the weights for the given input-channel.
+    w_channel = w[:, :, input_channel, :]
+
+    # Number of output-channels for the conv. layer.
+    num_output_channels = w_channel.shape[2]
+
+    # Get the lowest and highest values for the weights.
+    # This is used to correct the colour intensity across
+    # the images so they can compared with each other.
+    w_min = np.min(w_channel)
+    w_max = np.max(w_channel)
+
+    # This is used to center the colour intensity as zero.
+    abs_max = max(abs(w_min), abs(w_max))
+
+    # Print statistics for the weights.
+    print("Min: {0:.5f}, Max: {1:.5f}".format(w_min, w_max))
+    print("Mean: {0:.5f}, Stdev: {1:.5f}".format(w_channel.mean(), w_channel.std()))
+
+    # Number of grids to plot.
+    # Rounded-up, square-root of the number of output-channels.
+    num_grids = math.ceil(math.sqrt(num_output_channels))
+
+    # Create figure with a grid of sub-plots.
+    fig, axes = plt.subplots(num_grids, num_grids)
+
+    # Plot all the filter-weights.
+    for i, ax in enumerate(axes.flat):
+        # Only plot the valid filter-weights.
+        if i < num_output_channels:
+            # Get the weights for the i'th filter of this input-channel.
+            img = w_channel[:, :, i]
+
+            # Plot image.
+            ax.imshow(img, vmin=-abs_max, vmax=abs_max, interpolation='nearest', cmap='seismic')
+
+        # Remove ticks from the plot.
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Ensure the plot is shown correctly with multiple plots.
+    # in a single Notebook cell.
+    plt.show()
 
 # Weights for Convolutional Layer 1
+plot_conv_weights(model=model, layer_name='layer_conv1', input_channel=0)
+plot_conv_weights(model=model, layer_name='layer_conv1', input_channel=1)
 
 # Weights for Convolutional Layer 2
+plot_conv_weights(model=model, layer_name='layer_conv2', input_channel=0)
+
+# Weights for Convolutional Layer 3
+plot_conv_weights(model=model, layer_name='layer_conv3', input_channel=0)
+
