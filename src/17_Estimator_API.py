@@ -70,20 +70,20 @@ cls_true = data.y_test_cls[0:9]
 plot_images(images=images, cls_true=cls_true)
 
 # Input Functions for the Estimator
-train_input_fn = tf.estimator.inputs.numpy_input_fn(
+train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
     x={"x": np.array(data.x_train)},
     y=np.array(data.y_train_cls),
     num_epochs=None,
     shuffle=True)
 
-test_input_fn = tf.estimator.inputs.numpy_input_fn(
+test_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
     x={"x": np.array(data.x_test)},
     y=np.array(data.y_test_cls),
     num_epochs=1,
     shuffle=False)
 
 some_images = data.x_test[0:9]
-predict_input_fn = tf.estimator.inputs.numpy_input_fn(
+predict_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
     x={"x": some_images},
     num_epochs=1,
     shuffle=False)
