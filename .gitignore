@@ -6,4 +6,6 @@ inception/
 vgg16/
 checkpoints/
 checkpoints_tutorial16/
+checkpoints_tutorial17-1/
+checkpoints_tutorial17-2/
 .DS_Store
