@@ -224,3 +224,20 @@ params = {"learning_rate": 1e-4}
 model = tf.estimator.Estimator(model_fn=model_fn,
                                params=params,
                                model_dir="../checkpoints_tutorial17-2/")
+
+# Training
+model.train(input_fn=train_input_fn, steps=2000)
+
+# Evaluation
+result = model.evaluate(input_fn=test_input_fn)
+print(result)
+print("Classification accuracy: {0:.2%}".format(result["accuracy"]))
+
+# Predictions
+predictions = model.predict(input_fn=predict_input_fn)
+cls_pred = np.array(list(predictions))
+print("cls_pred: {}".format(cls_pred))
+
+plot_images(images=some_images,
+            cls_true=some_images_cls,
+            cls_pred=cls_pred)
